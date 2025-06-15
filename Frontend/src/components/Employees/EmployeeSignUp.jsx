@@ -49,48 +49,50 @@ function EmployeeSignup() {
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+// Update the handleSubmit function in your EmployeeSignup component:
+const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+        return;
+    }
+
+    setLoading(true);
+
+    try {
+        const { data } = await axios.post(`${apiUrl}/employee/employeesignup`, {
+            name: values.name,
+            email: values.email,
+            password: values.password,
+            position: values.position
+            // Remove the 'role' field - it's set automatically in the backend
+        }, {
+            withCredentials: true
+        });
+
+        if (data.signupStatus) {
+            toast.success("Employee account created successfully!");
+            // The cookie is already set by the backend
+            // Redirect to employee dashboard instead of login
+            setTimeout(() => navigate('/employeedashboard'), 2000);
+        } else {
+            toast.error(data.error || "Signup failed. Please try again.");
+        }
+    } catch (error) {
+        console.error('Signup error:', error);
         
-        if (!validateForm()) {
-            return;
+        // Handle different error types
+        if (error.response?.status === 409) {
+            toast.error("Email already exists. Please use a different email.");
+        } else if (error.response?.status === 400) {
+            toast.error(error.response.data.error || "Please fill all required fields.");
+        } else {
+            toast.error("An error occurred during signup. Please try again.");
         }
-
-        setLoading(true);
-
-        try {
-            const { data } = await axios.post(`${apiUrl}/employee/employeesignup`, {
-                name: values.name,
-                email: values.email,
-                password: values.password,
-                position: values.position,
-                role: 'employee'
-            }, {
-                withCredentials: true
-            });
-
-            if (data.signupStatus) {
-                toast.success("Employee account created! Redirecting to login...");
-                setTimeout(() => navigate('/employeelogin'), 2000);
-            } else {
-                toast.error(data.error || "Signup failed. Please try again.");
-            }
-        } catch (error) {
-            console.error('Signup error:', error);
-            if (error.response?.data?.errors) {
-                // Handle server-side validation errors
-                error.response.data.errors.forEach(err => {
-                    toast.error(err.msg);
-                });
-            } else if (error.response?.status === 409) {
-                toast.error("Email already exists.");
-            } else {
-                toast.error(error.response?.data?.error || "An error occurred during signup.");
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
+    } finally {
+        setLoading(false);
+    }
+};
 
     return (
         <div id='form-body' style={{

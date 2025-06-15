@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { AuthContext } from '../../App'; // Import AuthContext
 
 function AdminLogin() {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -14,19 +15,20 @@ function AdminLogin() {
     const [loading, setLoading] = useState(false);
     const [passwordVisible, setPasswordVisible] = useState(false);
     const navigate = useNavigate();
+    const { setAuth, verifyAuth } = useContext(AuthContext); // Use context
 
     // Configure axios defaults
     useEffect(() => {
         axios.defaults.withCredentials = true;
     }, []);
 
-    // Check if already authenticated
-    useEffect(() => {
-        const authData = JSON.parse(localStorage.getItem('auth'));
-        if (authData?.isAuthenticated) {
-            navigate('/dashboard');
-        }
-    }, [navigate]);
+    // Remove localStorage check for auth, rely on context
+    // useEffect(() => {
+    //     const authData = JSON.parse(localStorage.getItem('auth'));
+    //     if (authData?.isAuthenticated) {
+    //         navigate('/admindashboard'); // Fix: use correct admin dashboard route
+    //     }
+    // }, [navigate]);
 
     // Form validation
     const validateForm = () => {
@@ -79,25 +81,15 @@ function AdminLogin() {
             console.log('Login response:', response.data); // Debug log
 
             if (response.data.success) {
-                // Store auth data with consistent structure
-                const authData = {
-                    isAuthenticated: true,
-                    user: response.data.data || response.data.user,
-                    role: response.data.data?.role || response.data.user?.role || 'admin'
-                };
-
-                localStorage.setItem('auth', JSON.stringify(authData));
-                
                 toast.success('Login successful!');
-                
-                // Use navigate instead of window.location.href
-                navigate('/dashboard', { replace: true });
+                // Update context by verifying auth from backend
+                await verifyAuth();
+                navigate('/admindashboard', { replace: true });
             } else {
                 toast.error(response.data.message || 'Login failed');
             }
         } catch (error) {
             console.error('Login error:', error);
-            
             if (error.response?.status === 401) {
                 toast.error('Invalid email or password');
             } else if (error.response?.status === 500) {

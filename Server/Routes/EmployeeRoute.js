@@ -1,73 +1,152 @@
 import express from "express";
-import { getDB } from "../utils/db.js"; // Import the database getter function
+import { getDB } from "../utils/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { ObjectId } from 'mongodb'; // Import ObjectId at the top
+import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
-// Router for Employee Signup
+// Employee Signup (public)
 router.post("/employeesignup", async (req, res) => {
   const { name, email, password, position } = req.body;
-
-  // Validate required fields
   if (!name || !email || !password) {
     return res.status(400).json({ 
       signupStatus: false, 
       error: "Name, email, and password are required" 
     });
   }
-
-
   try {
-    const db = getDB(); // Get database instance
-    
-    // Check if user already exists
-    const existingUser = await db.collection("employees").findOne({ email: email });
-    
+    const db = getDB();
+    const existingUser = await db.collection("employees").findOne({ email });
     if (existingUser) {
       return res.status(409).json({ 
         signupStatus: false, 
         error: "Email already exists" 
       });
     }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newEmployee = {
+      name,
+      email,
+      password: hashedPassword,
+      role: 'employee',
+      position: position || '',
+      createdAt: new Date()
+    };
+    const result = await db.collection("employees").insertOne(newEmployee);
+    const token = jwt.sign(
+      { role: "employee", email, id: result.insertedId },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+    res.cookie("jwt", token, { 
+      httpOnly: true, 
+      maxAge: 3600000, 
+      secure: process.env.NODE_ENV === 'production' 
+    });
+    return res.status(201).json({ 
+      signupStatus: true, 
+      message: "Employee account created successfully", 
+      employee: { 
+        id: result.insertedId, 
+        name, 
+        email, 
+        role: 'employee', 
+        position: position || '' 
+      } 
+    });
+  } catch (err) {
+    console.error("Error during signup:", err);
+    return res.status(500).json({ 
+      signupStatus: false, 
+      error: "Internal Server Error" 
+    });
+  }
+});
 
-    // Add this route to your employee router (paste.txt)
+// Employee Login (public)
+router.post("/employeelogin", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const db = getDB();
+    const user = await db.collection("employees").findOne({ email });
+    if (user) {
+      const passwordsMatch = await bcrypt.compare(password, user.password);
+      if (passwordsMatch) {
+        const token = jwt.sign(
+          { role: "employee", email: user.email, id: user._id },
+          process.env.JWT_SECRET,
+          { expiresIn: "1d" }
+        );
+        res.cookie("jwt", token, { httpOnly: true, maxAge: 3600000, secure: process.env.NODE_ENV === 'production' });
+        // Return a consistent response for frontend
+        return res.status(200).json({
+          success: true,
+          loginStatus: true,
+          message: "You are logged in",
+          user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            position: user.position || ''
+          },
+          role: user.role
+        });
+      } else {
+        return res.status(401).json({
+          success: false,
+          loginStatus: false,
+          message: "Incorrect Email or Password"
+        });
+      }
+    } else {
+      return res.status(404).json({
+        success: false,
+        loginStatus: false,
+        message: "User not found"
+      });
+    }
+  } catch (err) {
+    console.error("Error:", err);
+    return res.status(500).json({
+      success: false,
+      loginStatus: false,
+      message: "Internal Server Error"
+    });
+  }
+});
+
+// Employee Auth Verification (public)
 router.get("/verify", async (req, res) => {
   const token = req.cookies.jwt;
-  
   if (!token) {
     return res.status(401).json({ 
       Status: false, 
       message: "No token provided" 
     });
   }
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Get user details from database
     const db = getDB();
     const user = await db.collection("employees").findOne(
       { _id: new ObjectId(decoded.id) },
-      { projection: { password: 0 } } // Exclude password
+      { projection: { password: 0 } }
     );
-
     if (!user) {
       return res.status(404).json({ 
         Status: false, 
         message: "User not found" 
       });
     }
-
     return res.status(200).json({ 
       Status: true, 
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        position: user.position
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        position: user.position 
       },
       role: user.role 
     });
@@ -80,144 +159,27 @@ router.get("/verify", async (req, res) => {
   }
 });
 
-    // Hash the password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Insert new employee into database
-    const newEmployee = {
-      name: name,
-      email: email,
-      password: hashedPassword,
-      role: 'employee', // Always set role to 'employee'
-      position: position || '', // Store position separately
-      createdAt: new Date()
-    };
-
-    const result = await db.collection("employees").insertOne(newEmployee);
-
-    // Generate JWT token for auto-login after signup
-    const token = jwt.sign(
-      { role: "employee", email: email, id: result.insertedId },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
-    // Set JWT token as a cookie
-    res.cookie("jwt", token, {
-      httpOnly: true,
-      maxAge: 3600000,
-      secure: process.env.NODE_ENV === 'production',
-    });
-
-    // Send success response
-    return res.status(201).json({
-      signupStatus: true,
-      message: "Employee account created successfully",
-      employee: { 
-        id: result.insertedId, 
-        name: name, 
-        email: email,
-        role: 'employee',
-        position: position || ''
-      }
-    });
-
-  } catch (err) {
-    console.error("Error during signup:", err);
-    return res.status(500).json({ 
-      signupStatus: false, 
-      error: "Internal Server Error" 
-    });
-  }
-});
-
-// Router for Login Form
-router.post("/employeelogin", async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const db = getDB(); // Get database instance
-    
-    // Find user by email
-    const user = await db.collection("employees").findOne({ email: email });
-
-    if (user) {
-      const storedHashedPassword = user.password;
-
-      const passwordsMatch = await bcrypt.compare(
-        password,
-        storedHashedPassword
-      );
-      
-      if (passwordsMatch) {
-        const token = jwt.sign(
-          { role: "employee", email: user.email, id: user._id },
-          process.env.JWT_SECRET,
-          { expiresIn: "1d" }
-        );
-
-        // Set JWT token as a cookie
-        res.cookie("jwt", token, {
-          httpOnly: true,
-          maxAge: 3600000,
-          secure: process.env.NODE_ENV === 'production',
-        });
-
-        // Send success response
-        return res.status(200).json({
-          loginStatus: true,
-          message: "You are logged in",
-          id: user._id,
-        });
-      } else {
-        // Send response for incorrect password
-        return res
-          .status(401)
-          .json({ loginStatus: false, error: "Incorrect Email or Password" });
-      }
-    } else {
-      // Send response for user not found
-      return res.status(404).json({ 
-        loginStatus: false, 
-        error: "User not found" 
-      });
-    }
-  } catch (err) {
-    // Send response for internal server error
-    console.error("Error:", err);
-    return res.status(500).json({ 
-      loginStatus: false, 
-      error: "Internal Server Error" 
-    });
-  }
+// Employee Logout
+router.get("/logout", (req, res) => {
+  res.clearCookie("jwt");
+  return res.json({ Status: true });
 });
 
 // Get employee details by ID
 router.get("/detail/:id", async (req, res) => {
   const id = req.params.id;
-  
   try {
-    const db = getDB(); // Get database instance
-    
-    const employee = await db.collection("employees").findOne({ 
-      _id: new ObjectId(id) 
-    });
-    
+    const db = getDB();
+    const employee = await db.collection("employees").findOne({ _id: new ObjectId(id) });
     if (employee) {
-      res.json({ success: true, Result: [employee] }); // Keeping array format for compatibility
+      return res.json({ success: true, Result: [employee] });
     } else {
-      res.json({ success: false, message: "Employee not found" });
+      return res.json({ success: false, message: "Employee not found" });
     }
   } catch (error) {
     console.error("Error fetching employee:", error);
-    res.json({ success: false, message: "Failed to fetch employee" });
+    return res.json({ success: false, message: "Failed to fetch employee" });
   }
-});
-
-router.get("/logout", (req, res) => {
-  res.clearCookie("jwt");
-  return res.json({ Status: true });
 });
 
 // Route to check if employee is currently clocked in

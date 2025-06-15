@@ -21,6 +21,7 @@ import { leaveRouter } from "./Routes/LeaveRouter.js";
 
 // DB Utils
 import { connectDB, getDB } from './utils/db.js';
+import User from "./models/User.js";
 
 // Load env vars
 dotenv.config();
@@ -80,10 +81,17 @@ const verifyUser = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const db = getDB();
-    const user = await db.collection("employees").findOne(
-      { _id: new ObjectId(decoded.id) },
-      { projection: { password: 0 } }
-    );
+    let user = null;
+
+    // Check both employees and users (admins)
+    if (decoded.role === 'admin') {
+      user = await User.findById(decoded.id).select("-password");
+    } else {
+      user = await db.collection("employees").findOne(
+        { _id: new ObjectId(decoded.id) },
+        { projection: { password: 0 } }
+      );
+    }
 
     if (!user) return res.status(404).json({ Status: false, Error: "User not found", success: false });
 
@@ -99,7 +107,7 @@ const verifyUser = async (req, res, next) => {
 
 // Routes
 app.use("/api/auth", adminRouter); // No verification
-app.use("/api/employee", verifyUser, employeeRouter);
+app.use("/api/employee", employeeRouter); // Signup/login and public routes
 app.use("/api/projects", verifyUser, projectRouter);
 app.use("/api/tasks", verifyUser, taskRouter);
 app.use("/api/clients", verifyUser, clientsRouter);
@@ -109,21 +117,35 @@ app.use("/api/attendance", verifyUser, attendanceRouter);
 app.use("/api/leave", verifyUser, leaveRouter);
 
 // Auth Verification Endpoint
-app.get('/api/verify', (req, res) => {
+app.get('/api/verify', async (req, res) => {
   const token = req.cookies.jwt;
   if (!token) return res.json({ Status: false, message: 'No token provided' });
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+  jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
     if (err) return res.json({ Status: false, message: 'Invalid token' });
+    let role = decoded.role;
+    let name = decoded.name;
+    // Double-check role from DB for safety
+    try {
+      if (role === 'admin') {
+        const admin = await User.findById(decoded.id);
+        if (admin) {
+          role = admin.role;
+          name = admin.name;
+        }
+      }
+    } catch (e) {
+      // fallback to JWT role
+    }
     return res.json({
       Status: true,
       message: 'Authenticated',
       user: {
         id: decoded.id,
         email: decoded.email,
-        name: decoded.name,
+        name: name || '',
       },
-      role: decoded.role,
+      role: role,
     });
   });
 });

@@ -12,6 +12,14 @@ router.post('/', async (req, res) => {
     const { startDate, endDate, reason } = req.body;
     const userId = req.id;
 
+    if (!userId) {
+      console.error('Leave request error: req.id (userId) is missing. Auth middleware may not be setting it correctly.');
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated. Please log in again.'
+      });
+    }
+
     if (!startDate || !endDate) {
       return res.status(400).json({ 
         success: false, 
@@ -32,10 +40,12 @@ router.post('/', async (req, res) => {
     const result = await db.collection('leaveRequests').insertOne(newLeaveRequest);
     
     // Emit notification to admin
-    req.io.to('admin_room').emit('new_leave_request', {
-      message: 'New leave request submitted',
-      requestId: result.insertedId
-    });
+    if (req.io) {
+      req.io.to('admin_room').emit('new_leave_request', {
+        message: 'New leave request submitted',
+        requestId: result.insertedId
+      });
+    }
 
     res.status(201).json({ 
       success: true, 

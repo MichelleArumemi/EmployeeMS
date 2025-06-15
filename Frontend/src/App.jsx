@@ -1,7 +1,7 @@
 import "react-toastify/dist/ReactToastify.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
-import { useState, useEffect, createContext, useContext, useMemo, useCallback } from "react";
+import { useState, useEffect, createContext, useContext, useMemo, useCallback, useRef } from "react";
 import axios from "axios";
 
 // Import your components
@@ -45,38 +45,64 @@ const AuthProvider = ({ children }) => {
     loading: true,
   });
 
+  // Use ref to prevent multiple simultaneous calls
+  const isVerifying = useRef(false);
+  const hasVerified = useRef(false);
+
   // Define verifyAuth as a stable function using useCallback
-// Replace the verifyAuth function in your App.jsx with this:
-const verifyAuth = useCallback(async () => {
-  try {
-    const response = await axios.get(`${apiUrl}/verify`, {
-      withCredentials: true, // This ensures cookies are sent
-    });
-    console.log("/api/verify response:", response.data);
+  const verifyAuth = useCallback(async () => {
+    // Prevent multiple simultaneous calls
+    if (isVerifying.current) {
+      console.log("Auth verification already in progress, skipping...");
+      return;
+    }
+
+    // If already verified and authenticated, skip
+    if (hasVerified.current && auth.isAuthenticated) {
+      console.log("Already authenticated, skipping verification...");
+      return;
+    }
+
+    isVerifying.current = true;
     
-    setAuth({
-      isAuthenticated: !!response.data.Status,
-      user: response.data.user || null,
-      role: response.data.role || null,
-      loading: false,
-    });
-  } catch (error) {
-    console.error("Auth verification failed:", error);
-    
-    // Don't rely on localStorage for auth - cookies should be the primary method
-    setAuth({
-      isAuthenticated: false,
-      user: null,
-      role: null,
-      loading: false,
-    });
-  }
-}, []);
+    try {
+      console.log("Initiating auth verification...");
+      const response = await axios.get(`${apiUrl}/verify`, {
+        withCredentials: true, // This ensures cookies are sent
+      });
+      
+      console.log("/api/verify response:", response.data);
+      
+      setAuth({
+        isAuthenticated: !!response.data.Status,
+        user: response.data.user || null,
+        role: response.data.role || null,
+        loading: false,
+      });
+
+      hasVerified.current = true;
+    } catch (error) {
+      console.error("Auth verification failed:", error);
+      
+      setAuth({
+        isAuthenticated: false,
+        user: null,
+        role: null,
+        loading: false,
+      });
+
+      hasVerified.current = true;
+    } finally {
+      isVerifying.current = false;
+    }
+  }, []); // Empty dependency array since we don't want this to change
 
   // Only run verifyAuth once on mount
   useEffect(() => {
-    verifyAuth();
-  }, [verifyAuth]);
+    if (!hasVerified.current) {
+      verifyAuth();
+    }
+  }, []); // Empty dependency array to run only once
 
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
@@ -213,4 +239,5 @@ function App() {
   );
 }
 
+export { AuthContext };
 export default App;

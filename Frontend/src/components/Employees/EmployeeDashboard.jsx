@@ -20,18 +20,26 @@ import axios from 'axios';
 
 // Employee Profile Component - View/Edit Own Profile
 const EmployeeProfile = () => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [profile, setProfile] = useState({
+  // Placeholder user data (simulate signup info)
+  const signupData = {
     firstName: 'John',
     lastName: 'Doe',
     email: 'john.doe@company.com',
-    phone: '+1 (555) 123-4567',
-    address: '123 Main St, City, State 12345',
-    dateOfBirth: '1990-01-15',
-    employeeId: 'EMP001',
-    department: 'Engineering',
     position: 'Software Developer',
-    joinDate: '2023-01-15'
+    // Add more fields as needed
+  };
+  const [isEditing, setIsEditing] = useState(false);
+  const [profile, setProfile] = useState({
+    firstName: signupData.firstName,
+    lastName: signupData.lastName,
+    email: signupData.email,
+    phone: 'Not provided', // Placeholder for phone number
+    address: 'Not provided', // Placeholder for address
+    dateOfBirth: 'Not provided',
+    employeeId: 'EMP001',
+    department: 'Not provided',
+    position: signupData.position,
+    joinDate: 'Not provided'
   });
 
   const handleSave = () => {
