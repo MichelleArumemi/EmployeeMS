@@ -46,63 +46,32 @@ const AuthProvider = ({ children }) => {
   });
 
   // Define verifyAuth as a stable function using useCallback
-  const verifyAuth = useCallback(async () => {
-    // Only call /api/verify if a token exists (localStorage or cookie)
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setAuth({
-        isAuthenticated: false,
-        user: null,
-        role: null,
-        loading: false,
-      });
-      return;
-    }
-    try {
-      const response = await axios.get(`${apiUrl}/verify`, {
-        withCredentials: true,
-      });
-      console.log("/api/verify response:", response.data);
-      
-      setAuth({
-        isAuthenticated: !!response.data.Status,
-        user: response.data.user || null,
-        role: response.data.role || null,
-        loading: false,
-      });
-    } catch (error) {
-      console.error("Auth verification failed:", error);
-      if (error.response) {
-        console.error("/api/verify error response:", error.response.data);
-      }
-      
-      // Check localStorage as fallback
-      const localAuth = localStorage.getItem('auth');
-      if (localAuth) {
-        try {
-          const parsedAuth = JSON.parse(localAuth);
-          if (parsedAuth.isAuthenticated) {
-            setAuth({
-              isAuthenticated: true,
-              user: parsedAuth.user,
-              role: parsedAuth.role || 'admin',
-              loading: false,
-            });
-            return;
-          }
-        } catch (e) {
-          console.error("Error parsing localStorage auth:", e);
-        }
-      }
-      
-      setAuth({
-        isAuthenticated: false,
-        user: null,
-        role: null,
-        loading: false,
-      });
-    }
-  }, []);
+// Replace the verifyAuth function in your App.jsx with this:
+const verifyAuth = useCallback(async () => {
+  try {
+    const response = await axios.get(`${apiUrl}/verify`, {
+      withCredentials: true, // This ensures cookies are sent
+    });
+    console.log("/api/verify response:", response.data);
+    
+    setAuth({
+      isAuthenticated: !!response.data.Status,
+      user: response.data.user || null,
+      role: response.data.role || null,
+      loading: false,
+    });
+  } catch (error) {
+    console.error("Auth verification failed:", error);
+    
+    // Don't rely on localStorage for auth - cookies should be the primary method
+    setAuth({
+      isAuthenticated: false,
+      user: null,
+      role: null,
+      loading: false,
+    });
+  }
+}, []);
 
   // Only run verifyAuth once on mount
   useEffect(() => {

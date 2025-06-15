@@ -18,6 +18,7 @@ router.post("/employeesignup", async (req, res) => {
     });
   }
 
+
   try {
     const db = getDB(); // Get database instance
     
@@ -31,6 +32,54 @@ router.post("/employeesignup", async (req, res) => {
       });
     }
 
+    // Add this route to your employee router (paste.txt)
+router.get("/verify", async (req, res) => {
+  const token = req.cookies.jwt;
+  
+  if (!token) {
+    return res.status(401).json({ 
+      Status: false, 
+      message: "No token provided" 
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Get user details from database
+    const db = getDB();
+    const user = await db.collection("employees").findOne(
+      { _id: new ObjectId(decoded.id) },
+      { projection: { password: 0 } } // Exclude password
+    );
+
+    if (!user) {
+      return res.status(404).json({ 
+        Status: false, 
+        message: "User not found" 
+      });
+    }
+
+    return res.status(200).json({ 
+      Status: true, 
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        position: user.position
+      },
+      role: user.role 
+    });
+  } catch (err) {
+    console.error("Token verification error:", err);
+    return res.status(403).json({ 
+      Status: false, 
+      message: "Invalid token" 
+    });
+  }
+});
+
     // Hash the password
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -40,7 +89,8 @@ router.post("/employeesignup", async (req, res) => {
       name: name,
       email: email,
       password: hashedPassword,
-      role: position || 'Employee',
+      role: 'employee', // Always set role to 'employee'
+      position: position || '', // Store position separately
       createdAt: new Date()
     };
 
@@ -68,7 +118,8 @@ router.post("/employeesignup", async (req, res) => {
         id: result.insertedId, 
         name: name, 
         email: email,
-        role: newEmployee.role
+        role: 'employee',
+        position: position || ''
       }
     });
 

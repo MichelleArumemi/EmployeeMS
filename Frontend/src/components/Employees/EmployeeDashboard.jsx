@@ -16,6 +16,7 @@ import {
   Download,
   History
 } from 'lucide-react';
+import axios from 'axios';
 
 // Employee Profile Component - View/Edit Own Profile
 const EmployeeProfile = () => {
@@ -170,25 +171,67 @@ const EmployeeDocuments = () => {
     { id: 2, name: 'ID_Copy.pdf', type: 'ID Document', uploadDate: '2024-01-15', status: 'Approved' },
     { id: 3, name: 'Certificate.pdf', type: 'Certificate', uploadDate: '2024-02-01', status: 'Pending' }
   ]);
+  const [file, setFile] = useState(null);
+  const [fileType, setFileType] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+  };
+
+  const handleUpload = (e) => {
+    e.preventDefault();
+    if (!file || !fileType) {
+      alert('Please select a file and type.');
+      return;
+    }
+    setUploading(true);
+    setTimeout(() => {
+      setDocuments(prev => [
+        {
+          id: prev.length ? prev[0].id + 1 : 1,
+          name: file.name,
+          type: fileType,
+          uploadDate: new Date().toISOString().slice(0, 10),
+          status: 'Pending'
+        },
+        ...prev
+      ]);
+      setFile(null);
+      setFileType('');
+      setUploading(false);
+      alert('File uploaded successfully!');
+    }, 1200);
+  };
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
         <UploadCloud size={18} /> My Documents
       </h3>
-      
-      <div className="mb-4">
+      <form className="mb-4" onSubmit={handleUpload}>
         <label className="block text-sm font-medium text-gray-700 mb-2">Upload New Document</label>
         <input
           type="file"
-          className="w-full p-2 border border-gray-300 rounded-lg"
+          className="w-full p-2 border border-gray-300 rounded-lg mb-2"
           accept=".pdf,.doc,.docx,.jpg,.png"
+          onChange={handleFileChange}
         />
-        <button className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-          Upload Document
+        <select
+          className="w-full p-2 border border-gray-300 rounded-lg mb-2"
+          value={fileType}
+          onChange={e => setFileType(e.target.value)}
+        >
+          <option value="">Select document type</option>
+          <option value="Resume">Resume</option>
+          <option value="ID Document">ID Document</option>
+          <option value="Certificate">Certificate</option>
+          <option value="Other">Other</option>
+        </select>
+        <button type="submit" disabled={uploading} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          {uploading ? 'Uploading...' : 'Upload Document'}
         </button>
-      </div>
-
+      </form>
       <div className="space-y-3">
         <h4 className="font-medium text-gray-900">Uploaded Documents</h4>
         {documents.map(doc => (
@@ -218,19 +261,108 @@ const EmployeeDocuments = () => {
 
 // My Attendance History
 const MyAttendance = () => {
-  const [attendanceData] = useState([
+  const [attendanceData, setAttendanceData] = useState([
     { date: '2024-06-14', checkIn: '09:00 AM', checkOut: '05:30 PM', status: 'Present', hours: '8.5' },
     { date: '2024-06-13', checkIn: '09:15 AM', checkOut: '05:45 PM', status: 'Present', hours: '8.5' },
     { date: '2024-06-12', checkIn: '09:00 AM', checkOut: '05:30 PM', status: 'Present', hours: '8.5' },
     { date: '2024-06-11', checkIn: '-', checkOut: '-', status: 'Absent', hours: '0' },
     { date: '2024-06-10', checkIn: '09:30 AM', checkOut: '05:30 PM', status: 'Late', hours: '8' }
   ]);
+  const [checkedIn, setCheckedIn] = useState(false);
+  const [checkedOut, setCheckedOut] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [todayRecord, setTodayRecord] = useState(null);
+
+  // Get today's date in YYYY-MM-DD
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Check if already checked in/out for today
+  useEffect(() => {
+    const record = attendanceData.find(row => row.date === today);
+    if (record) {
+      setTodayRecord(record);
+      setCheckedIn(record.checkIn !== '-' && record.checkOut === '-');
+      setCheckedOut(record.checkIn !== '-' && record.checkOut !== '-');
+    } else {
+      setTodayRecord(null);
+      setCheckedIn(false);
+      setCheckedOut(false);
+    }
+  }, [attendanceData, today]);
+
+  const handleCheckIn = () => {
+    setLoading(true);
+    setTimeout(() => {
+      const now = new Date();
+      const checkInTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const newRecord = {
+        date: today,
+        checkIn: checkInTime,
+        checkOut: '-',
+        status: 'Present',
+        hours: '0'
+      };
+      setAttendanceData(prev => [newRecord, ...prev]);
+      setCheckedIn(true);
+      setCheckedOut(false);
+      setLoading(false);
+      alert('Checked in successfully!');
+    }, 1000);
+  };
+
+  const handleCheckOut = () => {
+    setLoading(true);
+    setTimeout(() => {
+      const now = new Date();
+      const checkOutTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setAttendanceData(prev => prev.map(row =>
+        row.date === today
+          ? {
+              ...row,
+              checkOut: checkOutTime,
+              hours: calculateHours(row.checkIn, checkOutTime),
+              status: 'Present'
+            }
+          : row
+      ));
+      setCheckedOut(true);
+      setCheckedIn(false);
+      setLoading(false);
+      alert('Checked out successfully!');
+    }, 1000);
+  };
+
+  // Helper to calculate hours between check-in and check-out
+  function calculateHours(checkIn, checkOut) {
+    if (!checkIn || !checkOut || checkIn === '-' || checkOut === '-') return '0';
+    const [inH, inM] = checkIn.split(':').map(Number);
+    const [outH, outM] = checkOut.split(':').map(Number);
+    let hours = outH - inH + (outM - inM) / 60;
+    if (hours < 0) hours += 24; // handle overnight
+    return hours.toFixed(1);
+  }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
         <Clock size={18} /> My Attendance History
       </h3>
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={handleCheckIn}
+          disabled={checkedIn || checkedOut || loading}
+          className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors ${checkedIn ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
+        >
+          {loading && !checkedIn ? 'Checking in...' : checkedIn ? 'Checked In' : 'Check In'}
+        </button>
+        <button
+          onClick={handleCheckOut}
+          disabled={!checkedIn || checkedOut || loading}
+          className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors ${checkedOut ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+        >
+          {loading && !checkedOut ? 'Checking out...' : checkedOut ? 'Checked Out' : 'Check Out'}
+        </button>
+      </div>
 
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-green-50 p-4 rounded-lg">
@@ -301,25 +433,56 @@ const MyLeaveManagement = () => {
     endDate: '',
     reason: ''
   });
-
-  const [leaveBalance] = useState({
+  const [leaveBalance, setLeaveBalance] = useState({
     annual: 12,
     sick: 8,
     personal: 3
   });
+  const [leaveHistory, setLeaveHistory] = useState([]);
 
-  const [leaveHistory] = useState([
-    { id: 1, type: 'Annual Leave', startDate: '2024-05-01', endDate: '2024-05-05', days: 5, status: 'Approved', reason: 'Family vacation' },
-    { id: 2, type: 'Sick Leave', startDate: '2024-04-15', endDate: '2024-04-15', days: 1, status: 'Approved', reason: 'Medical appointment' },
-    { id: 3, type: 'Personal Leave', startDate: '2024-06-20', endDate: '2024-06-21', days: 2, status: 'Pending', reason: 'Personal matters' }
-  ]);
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+  useEffect(() => {
+    axios.get(`${apiUrl}/leave/my-requests`, { withCredentials: true })
+      .then(res => {
+        if (res.data.success) setLeaveHistory(res.data.data.map((item, idx) => ({
+          id: item._id,
+          type: item.type || (item.reason?.toLowerCase().includes('sick') ? 'Sick Leave' : item.reason?.toLowerCase().includes('personal') ? 'Personal Leave' : 'Annual Leave'),
+          startDate: item.startDate?.slice(0,10),
+          endDate: item.endDate?.slice(0,10),
+          days: Math.max(1, Math.round((new Date(item.endDate) - new Date(item.startDate)) / (1000 * 60 * 60 * 24)) + 1),
+          status: item.status?.charAt(0).toUpperCase() + item.status?.slice(1),
+          reason: item.reason
+        })));
+      });
+  }, []);
 
   const handleSubmitLeave = (e) => {
     e.preventDefault();
-    // API call to submit leave application
-    alert('Leave application submitted successfully!');
-    setShowApplicationForm(false);
-    setLeaveApplication({ type: '', startDate: '', endDate: '', reason: '' });
+    axios.post(`${apiUrl}/leave`, {
+      startDate: leaveApplication.startDate,
+      endDate: leaveApplication.endDate,
+      reason: leaveApplication.reason
+    }, { withCredentials: true })
+      .then(res => {
+        if (res.data.success) {
+          setLeaveHistory(prev => [
+            {
+              id: res.data.requestId,
+              type: leaveApplication.type === 'annual' ? 'Annual Leave' : leaveApplication.type === 'sick' ? 'Sick Leave' : 'Personal Leave',
+              startDate: leaveApplication.startDate,
+              endDate: leaveApplication.endDate,
+              days: Math.max(1, Math.round((new Date(leaveApplication.endDate) - new Date(leaveApplication.startDate)) / (1000 * 60 * 60 * 24)) + 1),
+              status: 'Pending',
+              reason: leaveApplication.reason
+            },
+            ...prev
+          ]);
+          setShowApplicationForm(false);
+          setLeaveApplication({ type: '', startDate: '', endDate: '', reason: '' });
+          alert('Leave application submitted successfully!');
+        }
+      });
   };
 
   return (
@@ -467,7 +630,7 @@ const MyPayroll = () => {
         </h3>
         <div className="bg-green-50 p-6 rounded-lg">
           <p className="text-sm text-green-700">Current Month Net Pay</p>
-          <p className="text-3xl font-bold text-green-600">${currentBalance.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-green-600">₦{currentBalance.toLocaleString()}</p>
         </div>
       </div>
 
@@ -492,9 +655,9 @@ const MyPayroll = () => {
               {payrollHistory.map((record, index) => (
                 <tr key={index} className="border-b border-gray-100">
                   <td className="py-2 px-3 font-medium">{record.month}</td>
-                  <td className="py-2 px-3">${record.gross.toLocaleString()}</td>
-                  <td className="py-2 px-3">${record.deductions.toLocaleString()}</td>
-                  <td className="py-2 px-3 font-medium text-green-600">${record.net.toLocaleString()}</td>
+                  <td className="py-2 px-3">₦{record.gross.toLocaleString()}</td>
+                  <td className="py-2 px-3">₦{record.deductions.toLocaleString()}</td>
+                  <td className="py-2 px-3 font-medium text-green-600">₦{record.net.toLocaleString()}</td>
                   <td className="py-2 px-3">
                     <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
                       {record.status}

@@ -13,6 +13,8 @@ import mongoose from "mongoose";
 import User from "../models/User.js";
 import Category from "../models/Category.js";
 import Admin from "../models/Admin.js";
+import Employee from "../models/Employee.js";
+import File from "../models/File.js";
 import { connectDB, getDB } from "../utils/db.js";
 
 dotenv.config();
@@ -563,6 +565,28 @@ router.post("/employees", authorize([ROLES.ADMIN]), upload.single("image"), [
       success: false, 
       error: "Failed to create employee" 
     });
+  }
+});
+
+// Get all employees (for admin)
+router.get('/employees', async (req, res) => {
+  try {
+    const employees = await Employee.find().select('-password');
+    res.json({ success: true, employees });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch employees' });
+  }
+});
+
+// Get single employee profile + files (for admin)
+router.get('/employees/:id', async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id).select('-password');
+    if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
+    const files = await File.find({ employeeId: req.params.id });
+    res.json({ success: true, employee, files });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch employee profile' });
   }
 });
 
