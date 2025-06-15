@@ -1,7 +1,7 @@
 import React from 'react';
 import { TrendingUp, BarChart3, Activity } from 'lucide-react';
 
-const Performance = () => {
+const EmployeePerformance = () => {
   const employees = [
     { id: 1, name: 'Sarah Johnson', department: 'Marketing', status: 'Active', performance: 92, attendance: 98 },
     { id: 2, name: 'Mike Chen', department: 'Development', status: 'Active', performance: 88, attendance: 85 },
@@ -70,4 +70,4 @@ const Performance = () => {
   );
 };
 
-export default Performance;
+export default EmployeePerformance;

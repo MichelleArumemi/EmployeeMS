@@ -1,200 +1,4 @@
-// import { useState } from 'react';
-// import axios from 'axios';
-// import { useNavigate, Link } from 'react-router-dom';
-// import { ToastContainer, toast } from 'react-toastify';
-// import 'react-toastify/dist/ReactToastify.css';
-
-// function EmployeeLogin() {
-//     const apiUrl = import.meta.env.VITE_API_URL;
-//     const [values, setValues] = useState({
-//         email: '',
-//         password: ''
-//     });
-//     const [loading, setLoading] = useState(false);
-//     const navigate = useNavigate();
-//     axios.defaults.withCredentials = true;
-
-//     const handleInputChange = (e) => {
-//         const { name, value } = e.target;
-//         setValues({ ...values, [name]: value });
-//     };
-
-//     const handleSubmit = async (e) => {
-//         e.preventDefault();
-//         setLoading(true);
-        
-//         if (!values.email || !values.password) {
-//             toast.error("Email and password are required.");
-//             setLoading(false);
-//             return;
-//         }
-    
-//         try {
-//             const result = await axios.post(`${apiUrl}/employee/employeelogin`, values);
-//             if (result.data.loginStatus) {
-//                 localStorage.setItem('valid', 'true');
-//                 toast.success("Login successful!");
-//                 navigate('/employeedetail/'+result.data.id);
-//             } else {
-//                 const errorMessage = result.data.error || "Invalid email or password.";
-//                 toast.error(errorMessage);
-//             }
-//         } catch (error) {
-//             if (error.response && error.response.status === 404) {
-//                 toast.error("Invalid email or password.");
-//             } else {
-//                 console.error(error);
-//                 toast.error("An error occurred.");
-//             }
-//         } finally {
-//             setLoading(false);
-//         }
-//     };
-    
-//     return (
-//         <div id='form-body' style={{
-//             background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 50%, #d4b6f4 100%)',
-//             minHeight: '100vh',
-//             padding: '20px'
-//         }}>
-//             <div className='d-flex justify-content-center align-items-center vh-100'>
-//                 <div className="p-1 rounded" style={{
-//                     background: 'rgba(255, 255, 255, 0.9)',
-//                     boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
-//                     backdropFilter: 'blur(5px)',
-//                     border: '1px solid rgba(255, 255, 255, 0.3)',
-//                     width: '100%',
-//                     maxWidth: '400px'
-//                 }}>
-//                     <div style={{
-//                         padding: '30px',
-//                         borderRadius: '12px'
-//                     }}>
-//                         <h2 style={{
-//                             color: '#5e72e4',
-//                             textAlign: 'center',
-//                             marginBottom: '30px'
-//                         }}>Employee Login</h2>
-//                         <form onSubmit={handleSubmit}>
-//                             <div className="mb-3">
-//                                 <label htmlFor='email' className="form-label" style={{
-//                                     color: '#5e72e4',
-//                                     fontWeight: '500'
-//                                 }}>Email:</label>
-//                                 <input
-//                                     type="email"
-//                                     id="emailInput"
-//                                     name='email'
-//                                     autoComplete='off'
-//                                     placeholder='example@gmail.com'
-//                                     value={values.email}
-//                                     onChange={handleInputChange}
-//                                     style={{
-//                                         border: '1px solid #a1c4fd',
-//                                         borderRadius: '8px',
-//                                         padding: '10px',
-//                                         width: '100%',
-//                                         marginBottom: '15px'
-//                                     }}
-//                                 />
-//                             </div>
-//                             <div className="mb-3">
-//                                 <label htmlFor='password' className="form-label" style={{
-//                                     color: '#5e72e4',
-//                                     fontWeight: '500'
-//                                 }}>Password:</label>
-//                                 <input
-//                                     type="password"
-//                                     name='password'
-//                                     placeholder='Your password'
-//                                     value={values.password}
-//                                     onChange={handleInputChange}
-//                                     style={{
-//                                         border: '1px solid #a1c4fd',
-//                                         borderRadius: '8px',
-//                                         padding: '10px',
-//                                         width: '100%',
-//                                         marginBottom: '20px'
-//                                     }}
-//                                 />
-//                             </div>
-//                             <button 
-//                                 type="submit" 
-//                                 disabled={loading}
-//                                 style={{
-//                                     background: 'linear-gradient(to right, #667eea, #764ba2)',
-//                                     color: 'white',
-//                                     border: 'none',
-//                                     padding: '12px 20px',
-//                                     borderRadius: '8px',
-//                                     width: '100%',
-//                                     fontWeight: '600',
-//                                     cursor: 'pointer',
-//                                     transition: 'all 0.3s ease',
-//                                     opacity: loading ? 0.7 : 1
-//                                 }}
-//                                 onMouseEnter={(e) => {
-//                                     if (!loading) {
-//                                         e.target.style.transform = 'translateY(-2px)';
-//                                         e.target.style.boxShadow = '0 7px 14px rgba(102, 126, 234, 0.3)';
-//                                     }
-//                                 }}
-//                                 onMouseLeave={(e) => {
-//                                     e.target.style.transform = 'none';
-//                                     e.target.style.boxShadow = 'none';
-//                                 }}
-//                             >
-//                                 {loading ? 'Logging in...' : 'Log in'}
-//                             </button>
-
-//                             <div style={{
-//                                 textAlign: 'center',
-//                                 marginTop: '20px',
-//                                 color: '#5e72e4'
-//                             }}>
-//                                 <span>Don't have an account? </span>
-//                                 <Link 
-//                                     to="/employeesignup" 
-//                                     style={{
-//                                         color: '#764ba2',
-//                                         fontWeight: '600',
-//                                         textDecoration: 'none'
-//                                     }}
-//                                     onMouseEnter={(e) => {
-//                                         e.target.style.textDecoration = 'underline';
-//                                     }}
-//                                     onMouseLeave={(e) => {
-//                                         e.target.style.textDecoration = 'none';
-//                                     }}
-//                                 >
-//                                     Sign up
-//                                 </Link>
-//                             </div>
-//                         </form>
-//                     </div>
-//                 </div>
-//             </div>
-            
-//             {/* Move ToastContainer to the end and add proper configuration */}
-//             <ToastContainer 
-//                 position="top-right"
-//                 autoClose={3000}
-//                 hideProgressBar={false}
-//                 newestOnTop={false}
-//                 closeOnClick
-//                 rtl={false}
-//                 pauseOnFocusLoss
-//                 draggable
-//                 pauseOnHover
-//                 theme="light"
-//             />
-//         </div>
-//     );
-// }
-
-// export default EmployeeLogin;
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -211,21 +15,39 @@ function EmployeeLogin() {
     const [loading, setLoading] = useState(false);
     const [passwordVisible, setPasswordVisible] = useState(false);
     const navigate = useNavigate();
+    
+    // Use ref to track if we've already checked auth to prevent infinite loops
+    const hasCheckedAuth = useRef(false);
 
     // Configure axios to send cookies with requests
     useEffect(() => {
         axios.defaults.withCredentials = true;
     }, []);
 
-    // Check if already authenticated as an employee
-    // This assumes your localStorage 'auth' object will correctly reflect the employee's role
+    // Check if already authenticated as an employee - FIXED to prevent infinite loop
     useEffect(() => {
-        const authData = JSON.parse(localStorage.getItem('auth'));
-        if (authData?.isAuthenticated && (authData.role === 'employee' || authData.role === 'admin')) {
-            // Redirect to employee dashboard if employee or admin is already logged in
-            navigate('/employeedashboard', { replace: true });
-        }
-    }, [navigate]);
+        // Only check once
+        if (hasCheckedAuth.current) return;
+        hasCheckedAuth.current = true; // Set flag immediately to prevent loop
+        const checkAuth = () => {
+            try {
+                const authData = localStorage.getItem('auth');
+                if (authData) {
+                    const parsedAuth = JSON.parse(authData);
+                    if (parsedAuth?.isAuthenticated && 
+                        (parsedAuth.role === 'employee' || parsedAuth.role === 'admin')) {
+                        navigate('/employeedashboard', { replace: true });
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking auth:', error);
+                // Clear invalid auth data
+                localStorage.removeItem('auth');
+            }
+        };
+        checkAuth();
+    }, [navigate]); // Only depend on navigate
 
     // Form validation logic
     const validateForm = () => {
@@ -281,11 +103,11 @@ function EmployeeLogin() {
 
             if (response.data.success) {
                 // Store authentication data in localStorage
-                // Ensure 'role' is correctly captured from your backend response (e.g., response.data.role)
+                // Ensure 'role' is correctly captured from your backend response
                 const authData = {
                     isAuthenticated: true,
-                    user: response.data.user || null, // Assuming user data comes in response.data.user
-                    role: response.data.role || 'employee' // Default to 'employee' if not explicitly provided
+                    user: response.data.user || null,
+                    role: response.data.role || 'employee'
                 };
 
                 localStorage.setItem('auth', JSON.stringify(authData));
@@ -317,7 +139,6 @@ function EmployeeLogin() {
             setLoading(false); // End loading state
         }
     };
-    
 
     return (
         <div id='form-body' style={{
@@ -367,7 +188,7 @@ function EmployeeLogin() {
                             type="email"
                             name='email'
                             autoComplete='username'
-                            placeholder='employee@example.com' /* Changed placeholder */
+                            placeholder='employee@example.com'
                             value={values.email}
                             onChange={handleInputChange}
                             style={{
@@ -447,7 +268,7 @@ function EmployeeLogin() {
 
                     <div style={{ marginBottom: '20px', textAlign: 'right' }}>
                         <Link 
-                            to="/forgot-password" /* Consider a separate employee forgot password route if needed */
+                            to="/forgot-password"
                             style={{
                                 color: '#6c757d',
                                 fontSize: '0.9rem',
@@ -491,7 +312,7 @@ function EmployeeLogin() {
                     }}>
                         Don't have an account?{' '}
                         <Link 
-                            to="/employeesignup" // Changed signup link
+                            to="/employeesignup"
                             style={{
                                 color: '#764ba2',
                                 fontWeight: '600',

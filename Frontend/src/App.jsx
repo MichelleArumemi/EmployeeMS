@@ -1,8 +1,7 @@
-import "bootstrap/dist/css/bootstrap.min.css";
 import "react-toastify/dist/ReactToastify.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
-import { useState, useEffect, createContext, useContext, useMemo } from "react";
+import { useState, useEffect, createContext, useContext, useMemo, useCallback } from "react";
 import axios from "axios";
 
 // Import your components
@@ -17,17 +16,16 @@ import ManageAdmin from "./components/Admin/ManageAdmin";
 import AddCategory from "./components/Admin/AddCategory";
 import AddEmployee from "./components/Admin/AddEmployee";
 import EditEmployee from "./components/Admin/EditEmployee";
-import Start from "./components/Start";
 import EmployeeLogin from "./components/Employees/EmployeeLogin";
+import EmployeeSignup from "./components/Employees/EmployeeSignUp";
 import EmployeeDetail from "./components/Employees/EmployeeDetail";
 import Office from "./components/Admin/Office";
 import AdminProjects from "./components/PMT/AdminProjects";
 import AdminTasks from "./components/PMT/AdminTasks";
 import Clients from "./components/PMT/Clients";
-import EmployeeSignup from "./components/Employees/EmployeeSignUp";
 
 // Move apiUrl outside the component for stable reference
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Constants for role management
 const ROLES = {
@@ -48,53 +46,62 @@ const AuthProvider = ({ children }) => {
   });
 
   // Define verifyAuth as a stable function using useCallback
-  const verifyAuth = useMemo(() => {
-    return async () => {
-      try {
-        const response = await axios.get(`${apiUrl}/api/verify`, {
-          withCredentials: true,
-        });
-        console.log("/api/verify response:", response.data);
-        
-        setAuth({
-          isAuthenticated: !!response.data.Status,
-          user: response.data.user || null,
-          role: response.data.role || null,
-          loading: false,
-        });
-      } catch (error) {
-        console.error("Auth verification failed:", error);
-        if (error.response) {
-          console.error("/api/verify error response:", error.response.data);
-        }
-        
-        // Check localStorage as fallback
-        const localAuth = localStorage.getItem('auth');
-        if (localAuth) {
-          try {
-            const parsedAuth = JSON.parse(localAuth);
-            if (parsedAuth.isAuthenticated) {
-              setAuth({
-                isAuthenticated: true,
-                user: parsedAuth.user,
-                role: parsedAuth.role || 'admin',
-                loading: false,
-              });
-              return;
-            }
-          } catch (e) {
-            console.error("Error parsing localStorage auth:", e);
-          }
-        }
-        
-        setAuth({
-          isAuthenticated: false,
-          user: null,
-          role: null,
-          loading: false,
-        });
+  const verifyAuth = useCallback(async () => {
+    // Only call /api/verify if a token exists (localStorage or cookie)
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setAuth({
+        isAuthenticated: false,
+        user: null,
+        role: null,
+        loading: false,
+      });
+      return;
+    }
+    try {
+      const response = await axios.get(`${apiUrl}/verify`, {
+        withCredentials: true,
+      });
+      console.log("/api/verify response:", response.data);
+      
+      setAuth({
+        isAuthenticated: !!response.data.Status,
+        user: response.data.user || null,
+        role: response.data.role || null,
+        loading: false,
+      });
+    } catch (error) {
+      console.error("Auth verification failed:", error);
+      if (error.response) {
+        console.error("/api/verify error response:", error.response.data);
       }
-    };
+      
+      // Check localStorage as fallback
+      const localAuth = localStorage.getItem('auth');
+      if (localAuth) {
+        try {
+          const parsedAuth = JSON.parse(localAuth);
+          if (parsedAuth.isAuthenticated) {
+            setAuth({
+              isAuthenticated: true,
+              user: parsedAuth.user,
+              role: parsedAuth.role || 'admin',
+              loading: false,
+            });
+            return;
+          }
+        } catch (e) {
+          console.error("Error parsing localStorage auth:", e);
+        }
+      }
+      
+      setAuth({
+        isAuthenticated: false,
+        user: null,
+        role: null,
+        loading: false,
+      });
+    }
   }, []);
 
   // Only run verifyAuth once on mount
@@ -125,13 +132,10 @@ const useAuth = () => {
   return context;
 };
 
-// Protected Route Component - FIXED to prevent infinite loops
+// Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { auth } = useAuth();
   const location = useLocation();
-
-  // Remove the console.log that was causing re-renders
-  // console.log("Auth State: ", auth); // This was part of the problem
 
   // Show loading spinner while auth is being verified
   if (auth.loading) {
@@ -179,7 +183,7 @@ function App() {
       >
         <Routes>
           {/* Public Routes */}
-          <Route path="/" element={<Start />} />
+          <Route path="/" element={<EmployeeLogin />} />
           <Route path="/adminlogin" element={<AdminLogin />} />
           <Route path="/adminsignup" element={<AdminSignUp />} />
           <Route path="/employeelogin" element={<EmployeeLogin />} />

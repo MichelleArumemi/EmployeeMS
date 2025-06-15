@@ -24,8 +24,8 @@ router.use(mongoSanitize());
 
 // Constants
 const ROLES = {
-  ADMIN: 'admin',
-  EMPLOYEE: 'employee'
+  ADMIN: "admin",
+  EMPLOYEE: "employee",
 };
 
 // Rate Limiting
@@ -200,7 +200,7 @@ router.post("/adminsignup", [
       { expiresIn: "24h" }
     );
 
-    // Set HTTP-only cookie
+    // Set HTTP-only cookie for auto-login after signup
     res.cookie("jwt", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

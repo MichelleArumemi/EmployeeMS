@@ -46,6 +46,20 @@ router.post("/employeesignup", async (req, res) => {
 
     const result = await db.collection("employees").insertOne(newEmployee);
 
+    // Generate JWT token for auto-login after signup
+    const token = jwt.sign(
+      { role: "employee", email: email, id: result.insertedId },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    // Set JWT token as a cookie
+    res.cookie("jwt", token, {
+      httpOnly: true,
+      maxAge: 3600000,
+      secure: process.env.NODE_ENV === 'production',
+    });
+
     // Send success response
     return res.status(201).json({
       signupStatus: true,

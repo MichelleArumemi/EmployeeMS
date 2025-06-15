@@ -7,7 +7,7 @@ const Start = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
 
     useEffect(() => {
-        axios.get(`${apiUrl}/verify`, { withCredentials: true })
+        axios.get(`${apiUrl}/api/verify`, { withCredentials: true })
             .then(result => {
                 if (result.data.Status) {
                     if (result.data.role === "admin") {
