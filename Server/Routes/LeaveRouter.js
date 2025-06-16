@@ -2,6 +2,7 @@ import express from 'express';
 import { getDB } from '../utils/db.js';
 import { ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
+import { verifyAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ router.post('/', async (req, res) => {
     const userId = req.id;
 
     if (!userId) {
-      console.error('Leave request error: req.id (userId) is missing. Auth middleware may not be setting it correctly.');
+      console.error('Leave request error: req.id (userId) is missing.');
       return res.status(401).json({
         success: false,
         message: 'User not authenticated. Please log in again.'
@@ -32,13 +33,13 @@ router.post('/', async (req, res) => {
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       reason: reason || '',
-      status: 'pending',
+      status: 'pending', // ✅ Default status
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
     const result = await db.collection('leaveRequests').insertOne(newLeaveRequest);
-    
+
     // Emit notification to admin
     if (req.io) {
       req.io.to('admin_room').emit('new_leave_request', {
@@ -52,6 +53,7 @@ router.post('/', async (req, res) => {
       message: 'Leave request submitted successfully',
       requestId: result.insertedId 
     });
+
   } catch (error) {
     console.error('Error submitting leave request:', error);
     res.status(500).json({ 
@@ -126,6 +128,10 @@ router.get('/pending', async (req, res) => {
       message: 'Failed to fetch pending leave requests' 
     });
   }
+});
+
+router.get('/pending', verifyAdmin, async (req, res) => {
+
 });
 
 // Admin approves/rejects leave request

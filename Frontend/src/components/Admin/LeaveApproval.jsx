@@ -34,11 +34,18 @@ const LeaveApproval = () => {
     fetchPendingRequests();
   }, []);
 
+  
+
   const fetchPendingRequests = async () => {
     try {
-      const response = await axios.get('/api/leave/pending', {
-        withCredentials: true
-      });
+await axios.patch(`/api/leave/${requestId}/status`, {
+  status: 'approved'
+}, {
+  headers: {
+    Authorization: `Bearer ${token}`
+  }
+});
+
       setPendingRequests(response.data.data);
     } catch (error) {
       console.error('Error fetching pending leave requests:', error);

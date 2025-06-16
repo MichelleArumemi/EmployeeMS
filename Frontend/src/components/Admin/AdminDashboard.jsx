@@ -17,6 +17,15 @@ import {
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+};
+
 // --- Admin Attendance: View employees currently at the office ---
 const AdminAttendance = () => {
   // Dummy data for employees present
@@ -61,23 +70,69 @@ const AdminEmployeeProfiles = () => {
   const [profile, setProfile] = useState(null);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    axios.get(`${apiUrl}/auth/employees`)
-      .then(res => setEmployees(res.data.employees))
-      .catch(() => setEmployees([]));
+    const fetchEmployees = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/auth/employees`, {
+          headers: getAuthHeaders()
+        });
+        setEmployees(response.data.employees || []);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching employees:', err);
+        setEmployees([]);
+        if (err.response?.status === 401) {
+          setError('Authentication failed. Please login again.');
+          // Optional: redirect to login
+          // window.location.href = '/adminlogin';
+        } else {
+          setError('Failed to fetch employees');
+        }
+      }
+    };
+
+    fetchEmployees();
   }, []);
 
-  const handleViewProfile = (id) => {
+  const handleViewProfile = async (id) => {
     setLoading(true);
-    axios.get(`${apiUrl}/auth/employees/${id}`)
-      .then(res => {
-        setProfile(res.data.employee);
-        setFiles(res.data.files);
-        setSelectedEmployee(id);
-      })
-      .finally(() => setLoading(false));
+    try {
+      const response = await axios.get(`${apiUrl}/auth/employees/${id}`, {
+        headers: getAuthHeaders()
+      });
+      setProfile(response.data.employee);
+      setFiles(response.data.files || []);
+      setSelectedEmployee(id);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please login again.');
+      } else {
+        setError('Failed to fetch employee profile');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (error) {
+    return (
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">{error}</div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (selectedEmployee && profile) {
     return (
@@ -203,13 +258,17 @@ const AdminLeaveManagement = () => {
       setLoading(true);
       setError(null);
       try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`${apiUrl}/leave/pending`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const response = await axios.get(`${apiUrl}/auth/pending`, {
+          headers: getAuthHeaders()
         });
-        setLeaveRequests(res.data.data || []);
+        setLeaveRequests(response.data.data || []);
       } catch (err) {
-        setError('Failed to fetch leave requests');
+        console.error('Error fetching leave requests:', err);
+        if (err.response?.status === 401) {
+          setError('Authentication failed. Please login again.');
+        } else {
+          setError('Failed to fetch leave requests');
+        }
       } finally {
         setLoading(false);
       }
@@ -222,13 +281,18 @@ const AdminLeaveManagement = () => {
     setActionLoading(prev => ({ ...prev, [id]: true }));
     setError(null);
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${apiUrl}/leave/${id}/status`, { status: action.toLowerCase() }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.patch(`${apiUrl}/leave/${id}/status`, 
+        { status: action.toLowerCase() }, 
+        { headers: getAuthHeaders() }
+      );
       setLeaveRequests(prev => prev.map(lr => lr._id === id ? { ...lr, status: action } : lr));
     } catch (err) {
-      setError('Failed to update leave status');
+      console.error('Error updating leave status:', err);
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please login again.');
+      } else {
+        setError('Failed to update leave status');
+      }
     } finally {
       setActionLoading(prev => ({ ...prev, [id]: false }));
     }
@@ -436,3 +500,4 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+

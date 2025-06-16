@@ -80,12 +80,13 @@ function AdminLogin() {
 
             console.log('Login response:', response.data); // Debug log
 
-            if (response.data.success) {
-                toast.success('Login successful!');
-                // Update context by verifying auth from backend
-                await verifyAuth();
-                navigate('/admindashboard', { replace: true });
-            } else {
+if (response.data.success) {
+  toast.success('Login successful!');
+  localStorage.setItem('token', response.data.token); // ✅ Add this line
+  await verifyAuth();
+  navigate('/admindashboard', { replace: true });
+}
+ else {
                 toast.error(response.data.message || 'Login failed');
             }
         } catch (error) {

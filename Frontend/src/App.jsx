@@ -23,6 +23,8 @@ import Office from "./components/Admin/Office";
 import AdminProjects from "./components/PMT/AdminProjects";
 import AdminTasks from "./components/PMT/AdminTasks";
 import Clients from "./components/PMT/Clients";
+// Add this import at the top with your other imports
+import RoleSelectionPage from "./components/RoleSelectionPage";
 
 // Move apiUrl outside the component for stable reference
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -178,7 +180,7 @@ function App() {
       >
         <Routes>
           {/* Public Routes */}
-          <Route path="/" element={<EmployeeLogin />} />
+          <Route path="/" element={<RoleSelectionPage />} />
           <Route path="/adminlogin" element={<AdminLogin />} />
           <Route path="/adminsignup" element={<AdminSignUp />} />
           <Route path="/employeelogin" element={<EmployeeLogin />} />

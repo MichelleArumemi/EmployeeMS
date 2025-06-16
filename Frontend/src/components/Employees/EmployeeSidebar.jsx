@@ -42,7 +42,7 @@ const EmployeeSidebar = ({ sidebarOpen, toggleSidebar, handleLogout }) => {
                 fontFamily: "Quicksand",
               }}
             >
-              {sidebarOpen ? "WORKSUITE" : ""}
+              {sidebarOpen ? "Employee Management System" : ""}
             </h2>
           </span>
         </Link>

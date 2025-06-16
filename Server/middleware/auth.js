@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 
 export const verifyUser = (req, res, next) => {
-  const token = req.cookies.jwt;
+  const token = req.cookies.jwt
   if (!token) {
     return res
       .status(401)
@@ -12,7 +12,7 @@ export const verifyUser = (req, res, next) => {
       return res.status(403).json({ success: false, message: "Invalid Token" });
     }
     req.role = decoded.role;
-    req.id = decoded.id;
+    req.id = decoded._id;
     next();
   });
 };
