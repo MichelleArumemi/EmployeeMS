@@ -570,13 +570,110 @@ router.post("/employees", authorize([ROLES.ADMIN]), upload.single("image"), [
 });
 
 // Debug route to test connectivity
-router.get('/debug', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Admin route is working',
-    user: req.user ? req.user.name : 'No user',
-    timestamp: new Date()
-  });
+router.get('/debug', async (req, res) => {
+  try {
+    const db = getDB();
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(col => col.name);
+    
+    // Get count of documents in each collection
+    const collectionCounts = {};
+    for (const name of collectionNames) {
+      try {
+        collectionCounts[name] = await db.collection(name).countDocuments();
+      } catch (err) {
+        collectionCounts[name] = `Error: ${err.message}`;
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Admin route is working',
+      user: req.user ? req.user.name : 'No user',
+      timestamp: new Date(),
+      collections: collectionNames,
+      collectionCounts: collectionCounts
+    });
+  } catch (err) {
+    res.json({ 
+      success: false, 
+      message: 'Debug route error',
+      error: err.message,
+      timestamp: new Date()
+    });
+  }
+});
+
+// Create test employee data (for debugging)
+router.post('/create-test-data', async (req, res) => {
+  try {
+    const db = getDB();
+    
+    // Create test employees
+    const testEmployees = [
+      {
+        name: 'John Doe',
+        email: 'john@company.com',
+        password: await bcrypt.hash('password123', 10),
+        role: 'employee',
+        position: 'Software Developer',
+        department: 'IT',
+        phone: '123-456-7890',
+        address: '123 Main St',
+        joinDate: new Date(),
+        createdAt: new Date()
+      },
+      {
+        name: 'Jane Smith',
+        email: 'jane@company.com',
+        password: await bcrypt.hash('password123', 10),
+        role: 'employee',
+        position: 'Project Manager',
+        department: 'Operations',
+        phone: '098-765-4321',
+        address: '456 Oak Ave',
+        joinDate: new Date(),
+        createdAt: new Date()
+      },
+      {
+        name: 'Mike Johnson',
+        email: 'mike@company.com',
+        password: await bcrypt.hash('password123', 10),
+        role: 'employee',
+        position: 'Designer',
+        department: 'Marketing',
+        phone: '555-123-4567',
+        address: '789 Pine St',
+        joinDate: new Date(),
+        createdAt: new Date()
+      }
+    ];
+    
+    // Insert employees
+    const employeeResult = await db.collection("employees").insertMany(testEmployees);
+    
+    // Create test clock records for today
+    const today = new Date();
+    const testClockRecords = employeeResult.insertedIds.map((id, index) => ({
+      employee_id: id,
+      clock_in: new Date(today.getTime() - (index + 1) * 3600000), // Staggered clock-in times
+      clock_out: null,
+      location: index === 0 ? 'Main Office' : index === 1 ? 'Remote' : 'Branch Office',
+      work_from_type: index === 1 ? 'remote' : 'office'
+    }));
+    
+    await db.collection("clock_records").insertMany(testClockRecords);
+    
+    res.json({ 
+      success: true, 
+      message: 'Test data created successfully',
+      employeesCreated: testEmployees.length,
+      clockRecordsCreated: testClockRecords.length
+    });
+  } catch (err) {
+    console.error('Error creating test data:', err);
+    res.status(500).json({ success: false, error: 'Failed to create test data', details: err.message });
+  }
 });
 
 // Get all employees (for admin)
