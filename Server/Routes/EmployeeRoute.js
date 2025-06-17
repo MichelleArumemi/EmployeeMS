@@ -182,85 +182,224 @@ router.get("/detail/:id", async (req, res) => {
   }
 });
 
-// Route to check if employee is currently clocked in
-router.get("/employee_is_clocked_in/:id", async (req, res) => {
-  const { id } = req.params;
+ // Route to check if employee is currently clocked in
+  router.get("/employee_is_clocked_in/:id", async (req, res) => {
+    const { id } = req.params;
 
-  try {
-    const db = getDB(); // Get database instance
-    
-    // Check if there is a clock-in record without a corresponding clock-out time
-    const clockRecord = await db.collection("clock_records").findOne({
-      employee_id: new ObjectId(id),
-      clock_out: null
-    });
-
-    // Send success response with clock-in status
-    return res.status(200).json({ clockedIn: clockRecord !== null });
-  } catch (error) {
-    console.error("Error while checking clock-in status:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Internal Server Error" });
-  }
-});
-
-// Route to handle employee clock-in
-router.post("/employee_clockin/:id", async (req, res) => {
-  const { id } = req.params;
-  const { location, work_from_type } = req.body;
-
-  try {
-    const db = getDB(); // Get database instance
-    
-    // Insert clock-in record into the database
-    const clockRecord = {
-      employee_id: new ObjectId(id),
-      clock_in: new Date(),
-      location: location,
-      work_from_type: work_from_type,
-      clock_out: null
-    };
-
-    await db.collection("clock_records").insertOne(clockRecord);
-
-    // Send success response
-    return res.status(200).json({ status: "success" });
-  } catch (error) {
-    console.error("Error while clocking in:", error);
-    return res
-      .status(500)
-      .json({ status: "error", message: "Internal Server Error" });
-  }
-});
-
-// Route to handle employee clock-out
-router.post("/employee_clockout/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const db = getDB(); // Get database instance
-    
-    // Update the clock-out time for the employee
-    await db.collection("clock_records").updateOne(
-      { 
-        employee_id: new ObjectId(id), 
-        clock_out: null 
-      },
-      { 
-        $set: { clock_out: new Date() } 
+    try {
+      // Validate ID format
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid employee ID format" 
+        });
       }
-    );
 
-    // Send success response
-    return res.status(200).json({ success: true });
-  } catch (error) {
-    console.error("Error while clocking out:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Internal Server Error" });
-  }
-});
+      const db = getDB();
+      
+      // Check for active session (clocked in but not out)
+      const activeSession = await db.collection("ClockRecord").findOne({
+        employee_id: new ObjectId(id),
+        clock_out: null
+      });
+
+      // Check if there's a session for today (even if clocked out)
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const todaySession = await db.collection("ClockRecord").findOne({
+        employee_id: new ObjectId(id),
+        clock_in: { $gte: todayStart, $lte: todayEnd }
+      });
+
+      return res.status(200).json({ 
+        success: true,
+        data: {
+          isClockedIn: activeSession !== null,
+          todaySession: {
+            hasSession: todaySession !== null,
+            clockIn: todaySession?.clock_in,
+            clockOut: todaySession?.clock_out,
+            location: todaySession?.location,
+            workType: todaySession?.work_from_type
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Clock-in status check error:", error);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Internal server error",
+        error: error.message 
+      });
+    }
+  });
+
+  // Route to handle employee clock-in
+  router.post("/employee_clockin/:id", async (req, res) => {
+    const { id } = req.params;
+    const { location = 'office', work_from_type = 'office' } = req.body;
+
+    try {
+      // Validate ID format
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid employee ID format" 
+        });
+      }
+
+      // Validate input
+      if (!['office', 'remote', 'client-site'].includes(location)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid location value" 
+        });
+      }
+
+      if (!['office', 'home', 'hybrid'].includes(work_from_type)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid work type value" 
+        });
+      }
+
+      const db = getDB();
+      
+      // Check if already clocked in
+      const existingSession = await db.collection("ClockRecord").findOne({
+        employee_id: new ObjectId(id),
+        clock_out: null
+      });
+
+      if (existingSession) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Employee is already clocked in" 
+        });
+      }
+
+      // Create new clock-in record
+      const clockRecord = {
+        employee_id: new ObjectId(id),
+        clock_in: new Date(),
+        location,
+        work_from_type,
+        clock_out: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const result = await db.collection("ClockRecord").insertOne(clockRecord);
+
+      // Emit real-time event
+      if (req.io) {
+        req.io.emit('attendance_update', {
+          employeeId: id,
+          type: 'clock_in',
+          time: clockRecord.clock_in,
+          location,
+          workType: work_from_type
+        });
+      }
+
+      return res.status(201).json({ 
+        success: true,
+        message: "Clock-in recorded successfully",
+        data: {
+          recordId: result.insertedId,
+          ...clockRecord
+        }
+      });
+    } catch (error) {
+      console.error("Clock-in error:", error);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to record clock-in",
+        error: error.message 
+      });
+    }
+  });
+
+  // Route to handle employee clock-out
+  router.post("/employee_clockout/:id", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+      // Validate ID format
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid employee ID format" 
+        });
+      }
+
+      const db = getDB();
+      
+      // Find active session to clock out
+      const activeSession = await db.collection("ClockRecord").findOne({
+        employee_id: new ObjectId(id),
+        clock_out: null
+      });
+
+      if (!activeSession) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "No active clock-in session found" 
+        });
+      }
+
+      // Calculate hours worked
+      const clockOutTime = new Date();
+      const hoursWorked = ((clockOutTime - activeSession.clock_in) / (1000 * 60 * 60)).toFixed(2);
+
+      // Update the record
+      const result = await db.collection("ClockRecord").updateOne(
+        { _id: activeSession._id },
+        { 
+          $set: { 
+            clock_out: clockOutTime,
+            hours_worked: parseFloat(hoursWorked),
+            updatedAt: new Date()
+          } 
+        }
+      );
+
+      // Emit real-time event
+      if (req.io) {
+        req.io.emit('attendance_update', {
+          employeeId: id,
+          type: 'clock_out',
+          time: clockOutTime,
+          hoursWorked
+        });
+      }
+
+      return res.status(200).json({ 
+        success: true,
+        message: "Clock-out recorded successfully",
+        data: {
+          clockIn: activeSession.clock_in,
+          clockOut: clockOutTime,
+          hoursWorked,
+          location: activeSession.location,
+          workType: activeSession.work_from_type
+        }
+      });
+    } catch (error) {
+      console.error("Clock-out error:", error);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to record clock-out",
+        error: error.message 
+      });
+    }
+  });
+
+  
 
 // Route to fetch calendar data for a specific employee
 router.get("/calendar/:employeeId", async (req, res) => {
@@ -270,7 +409,7 @@ router.get("/calendar/:employeeId", async (req, res) => {
     const db = getDB(); // Get database instance
     
     // Fetch clock records for the employee from the database
-    const clockRecords = await db.collection("clock_records")
+    const clockRecords = await db.collection("ClockRecord")
       .find({ employee_id: new ObjectId(employeeId) })
       .toArray();
 

@@ -270,84 +270,142 @@ const EmployeeDocuments = () => {
 
 // My Attendance History
 const MyAttendance = () => {
-  const [attendanceData, setAttendanceData] = useState([
-    { date: '2024-06-14', checkIn: '09:00 AM', checkOut: '05:30 PM', status: 'Present', hours: '8.5' },
-    { date: '2024-06-13', checkIn: '09:15 AM', checkOut: '05:45 PM', status: 'Present', hours: '8.5' },
-    { date: '2024-06-12', checkIn: '09:00 AM', checkOut: '05:30 PM', status: 'Present', hours: '8.5' },
-    { date: '2024-06-11', checkIn: '-', checkOut: '-', status: 'Absent', hours: '0' },
-    { date: '2024-06-10', checkIn: '09:30 AM', checkOut: '05:30 PM', status: 'Late', hours: '8' }
-  ]);
+  const [attendanceData, setAttendanceData] = useState([]);
   const [checkedIn, setCheckedIn] = useState(false);
   const [checkedOut, setCheckedOut] = useState(false);
   const [loading, setLoading] = useState(false);
   const [todayRecord, setTodayRecord] = useState(null);
+  const [location, setLocation] = useState('office'); // Default location
+  const [workFromType, setWorkFromType] = useState('office'); // Default work type
+
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const userId = localStorage.getItem('userId'); // Make sure you store userId after login
 
   // Get today's date in YYYY-MM-DD
   const today = new Date().toISOString().slice(0, 10);
 
   // Check if already checked in/out for today
   useEffect(() => {
-    const record = attendanceData.find(row => row.date === today);
-    if (record) {
-      setTodayRecord(record);
-      setCheckedIn(record.checkIn !== '-' && record.checkOut === '-');
-      setCheckedOut(record.checkIn !== '-' && record.checkOut !== '-');
-    } else {
-      setTodayRecord(null);
-      setCheckedIn(false);
-      setCheckedOut(false);
-    }
-  }, [attendanceData, today]);
+    const fetchTodayAttendance = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/attendance/today/${userId}`, { 
+          withCredentials: true 
+        });
+        
+        if (response.data.data) {
+          const record = response.data.data;
+          setTodayRecord(record);
+          setCheckedIn(!!record.clock_in);
+          setCheckedOut(!!record.clock_out);
+          
+          // Add to local attendance data if not already present
+          if (!attendanceData.some(r => r.date === today)) {
+            setAttendanceData(prev => [{
+              date: today,
+              checkIn: record.clock_in ? new Date(record.clock_in).toLocaleTimeString() : '-',
+              checkOut: record.clock_out ? new Date(record.clock_out).toLocaleTimeString() : '-',
+              status: record.clock_out ? 'Present' : (record.clock_in ? 'Checked In' : 'Absent'),
+              hours: record.clock_out ? calculateHours(
+                new Date(record.clock_in).toLocaleTimeString(),
+                new Date(record.clock_out).toLocaleTimeString()
+              ) : '0'
+            }, ...prev]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching today\'s attendance:', error);
+      }
+    };
 
-  const handleCheckIn = () => {
+    fetchTodayAttendance();
+  }, [userId, today]);
+
+  const handleCheckIn = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const now = new Date();
-      const checkInTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const newRecord = {
-        date: today,
-        checkIn: checkInTime,
-        checkOut: '-',
-        status: 'Present',
-        hours: '0'
-      };
-      setAttendanceData(prev => [newRecord, ...prev]);
-      setCheckedIn(true);
-      setCheckedOut(false);
+    try {
+      const response = await axios.post(
+        `${apiUrl}/employee_clockin/${userId}`,
+        { 
+          location,
+          work_from_type: workFromType 
+        },
+        { withCredentials: true }
+      );
+
+      if (response.data.status === "success") {
+        const now = new Date();
+        const checkInTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        setAttendanceData(prev => [{
+          date: today,
+          checkIn: checkInTime,
+          checkOut: '-',
+          status: 'Checked In',
+          hours: '0'
+        }, ...prev]);
+        
+        setCheckedIn(true);
+        setCheckedOut(false);
+        alert('Checked in successfully!');
+      }
+    } catch (error) {
+      console.error('Error checking in:', error);
+      alert('Failed to check in');
+    } finally {
       setLoading(false);
-      alert('Checked in successfully!');
-    }, 1000);
+    }
   };
 
-  const handleCheckOut = () => {
+  const handleCheckOut = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const now = new Date();
-      const checkOutTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setAttendanceData(prev => prev.map(row =>
-        row.date === today
-          ? {
-              ...row,
-              checkOut: checkOutTime,
-              hours: calculateHours(row.checkIn, checkOutTime),
-              status: 'Present'
-            }
-          : row
-      ));
-      setCheckedOut(true);
-      setCheckedIn(false);
+    try {
+      const response = await axios.post(
+        `${apiUrl}/employee_clockout/${userId}`,
+        {},
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        const now = new Date();
+        const checkOutTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        setAttendanceData(prev => prev.map(row => 
+          row.date === today
+            ? {
+                ...row,
+                checkOut: checkOutTime,
+                hours: calculateHours(row.checkIn, checkOutTime),
+                status: 'Present'
+              }
+            : row
+        ));
+        
+        setCheckedOut(true);
+        setCheckedIn(false);
+        alert('Checked out successfully!');
+      }
+    } catch (error) {
+      console.error('Error checking out:', error);
+      alert('Failed to check out');
+    } finally {
       setLoading(false);
-      alert('Checked out successfully!');
-    }, 1000);
+    }
   };
 
   // Helper to calculate hours between check-in and check-out
   function calculateHours(checkIn, checkOut) {
     if (!checkIn || !checkOut || checkIn === '-' || checkOut === '-') return '0';
-    const [inH, inM] = checkIn.split(':').map(Number);
-    const [outH, outM] = checkOut.split(':').map(Number);
-    let hours = outH - inH + (outM - inM) / 60;
+    const [inH, inM, inPeriod] = checkIn.split(/:| /);
+    const [outH, outM, outPeriod] = checkOut.split(/:| /);
+    
+    // Convert to 24-hour format
+    let in24 = parseInt(inH) + (inPeriod === 'PM' && inH !== '12' ? 12 : 0);
+    let out24 = parseInt(outH) + (outPeriod === 'PM' && outH !== '12' ? 12 : 0);
+    
+    // Calculate difference
+    let hours = out24 - in24 + (parseInt(outM) - parseInt(inM)) / 60;
     if (hours < 0) hours += 24; // handle overnight
+    
     return hours.toFixed(1);
   }
 
@@ -356,23 +414,60 @@ const MyAttendance = () => {
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
         <Clock size={18} /> My Attendance History
       </h3>
-      <div className="flex gap-4 mb-6">
+      
+      {/* Check-in/Check-out Form */}
+      <div className="flex gap-4 mb-6 flex-wrap">
+        {!checkedIn && !checkedOut && (
+          <div className="flex gap-4 w-full">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+              <select
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-lg"
+              >
+                <option value="office">Office</option>
+                <option value="remote">Remote</option>
+                <option value="client-site">Client Site</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Work Type</label>
+              <select
+                value={workFromType}
+                onChange={(e) => setWorkFromType(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-lg"
+              >
+                <option value="office">Office</option>
+                <option value="home">Home</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </div>
+          </div>
+        )}
+        
         <button
           onClick={handleCheckIn}
           disabled={checkedIn || checkedOut || loading}
-          className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors ${checkedIn ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
+          className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors flex-1 ${
+            checkedIn ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'
+          }`}
         >
           {loading && !checkedIn ? 'Checking in...' : checkedIn ? 'Checked In' : 'Check In'}
         </button>
+        
         <button
           onClick={handleCheckOut}
           disabled={!checkedIn || checkedOut || loading}
-          className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors ${checkedOut ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+          className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors flex-1 ${
+            checkedOut ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+          }`}
         >
           {loading && !checkedOut ? 'Checking out...' : checkedOut ? 'Checked Out' : 'Check Out'}
         </button>
       </div>
 
+      {/* Stats */}
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-green-50 p-4 rounded-lg">
           <div className="flex items-center gap-2">
@@ -397,6 +492,7 @@ const MyAttendance = () => {
         </div>
       </div>
 
+      {/* Attendance Table */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>

@@ -37,7 +37,7 @@ const AdminAttendance = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.get(`${apiUrl}/attendance/detailed`, {
+        const response = await axios.get(`${apiUrl}/attendance`, {
           withCredentials: true
         });
         if (response.data.success) {

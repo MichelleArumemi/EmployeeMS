@@ -9,13 +9,16 @@ router.get("/", async (req, res) => {
   try {
     // Get today's date range (start and end of day)
     const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
 
     const db = getDB();
     
     // Count employees who clocked in today
-    const presentCount = await db.collection("clock_records").countDocuments({
+    const presentCount = await db.collection("ClockRecord").countDocuments({
       clock_in: {
         $gte: startOfDay,
         $lte: endOfDay
@@ -63,7 +66,7 @@ router.get("/date/:date", async (req, res) => {
     const db = getDB();
     
     // Count employees who clocked in on the specified date
-    const presentCount = await db.collection("clock_records").countDocuments({
+    const presentCount = await db.collection("ClockRecord").countDocuments({
       clock_in: {
         $gte: startOfDay,
         $lte: endOfDay
@@ -100,7 +103,7 @@ router.get("/detailed", async (req, res) => {
     const db = getDB();
     
     // Get all clock records for today with employee details
-    const presentEmployees = await db.collection("clock_records").aggregate([
+    const presentEmployees = await db.collection("ClockRecord").aggregate([
       {
         $match: {
           clock_in: {
@@ -186,7 +189,7 @@ router.get("/summary/:period", async (req, res) => {
     const db = getDB();
     
     // Aggregate attendance data for the period
-    const attendanceData = await db.collection("clock_records").aggregate([
+    const attendanceData = await db.collection("ClockRecord").aggregate([
       {
         $match: {
           clock_in: {
