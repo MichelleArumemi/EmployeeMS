@@ -16,6 +16,7 @@ import Admin from "../models/Admin.js";
 import Employee from "../models/Employee.js";
 import File from "../models/File.js";
 import { connectDB, getDB } from "../utils/db.js";
+import { ObjectId } from "mongodb";
 
 dotenv.config();
 const router = express.Router();
@@ -568,12 +569,28 @@ router.post("/employees", authorize([ROLES.ADMIN]), upload.single("image"), [
   }
 });
 
+// Debug route to test connectivity
+router.get('/debug', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Admin route is working',
+    user: req.user ? req.user.name : 'No user',
+    timestamp: new Date()
+  });
+});
+
 // Get all employees (for admin)
 router.get('/employees', async (req, res) => {
   try {
-    const employees = await Employee.find().select('-password');
+    console.log('Admin /employees route hit');
+    const db = getDB();
+    const employees = await db.collection("employees")
+      .find({}, { projection: { password: 0 } })
+      .toArray();
+    console.log('Found employees:', employees.length);
     res.json({ success: true, employees });
   } catch (err) {
+    console.error('Error in /employees route:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch employees' });
   }
 });
@@ -581,9 +598,13 @@ router.get('/employees', async (req, res) => {
 // Get single employee profile + files (for admin)
 router.get('/employees/:id', async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id).select('-password');
+    const db = getDB();
+    const employee = await db.collection("employees").findOne(
+      { _id: new ObjectId(req.params.id) },
+      { projection: { password: 0 } }
+    );
     if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
-    const files = await File.find({ employeeId: req.params.id });
+    const files = await db.collection("files").find({ employeeId: new ObjectId(req.params.id) }).toArray();
     res.json({ success: true, employee, files });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch employee profile' });

@@ -34,18 +34,23 @@ const AdminAttendance = () => {
 
   useEffect(() => {
     const fetchAttendanceData = async () => {
+      console.log('Fetching attendance from:', `${apiUrl}/attendance/detailed`);
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.get(`${apiUrl}/attendance`, {
+        const response = await axios.get(`${apiUrl}/attendance/detailed`, {
           withCredentials: true
         });
+        console.log('Attendance response:', response.data);
         if (response.data.success) {
           setAttendanceData(response.data.attendance.present.employees || []);
+        } else {
+          setError('No attendance data available');
         }
       } catch (err) {
         console.error('Error fetching attendance data:', err);
-        setError('Failed to fetch attendance data');
+        console.error('Error response:', err.response?.data);
+        setError(`Failed to fetch attendance data: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -110,21 +115,22 @@ const AdminEmployeeProfiles = () => {
 
   useEffect(() => {
     const fetchEmployees = async () => {
+      console.log('Fetching employees from:', `${apiUrl}/auth/employees`);
       try {
-        const response = await axios.get(`${apiUrl}/employee/employee/list`, {
+        const response = await axios.get(`${apiUrl}/auth/employees`, {
           withCredentials: true
         });
+        console.log('Employees response:', response.data);
         setEmployees(response.data.employees || []);
         setError(null);
       } catch (err) {
         console.error('Error fetching employees:', err);
+        console.error('Error response:', err.response?.data);
         setEmployees([]);
         if (err.response?.status === 401) {
           setError('Authentication failed. Please login again.');
-          // Optional: redirect to login
-          // window.location.href = '/adminlogin';
         } else {
-          setError('Failed to fetch employees');
+          setError(`Failed to fetch employees: ${err.message}`);
         }
       }
     };
@@ -133,21 +139,24 @@ const AdminEmployeeProfiles = () => {
   }, []);
 
   const handleViewProfile = async (id) => {
+    console.log('Fetching profile for employee ID:', id);
     setLoading(true);
     try {
-      const response = await axios.get(`${apiUrl}/employee/detail/${id}`, {
+      const response = await axios.get(`${apiUrl}/auth/employees/${id}`, {
         withCredentials: true
       });
-      setProfile(response.data.Result?.[0] || response.data.employee);
+      console.log('Profile response:', response.data);
+      setProfile(response.data.employee);
       setFiles(response.data.files || []);
       setSelectedEmployee(id);
       setError(null);
     } catch (err) {
       console.error('Error fetching profile:', err);
+      console.error('Error response:', err.response?.data);
       if (err.response?.status === 401) {
         setError('Authentication failed. Please login again.');
       } else {
-        setError('Failed to fetch employee profile');
+        setError(`Failed to fetch employee profile: ${err.message}`);
       }
     } finally {
       setLoading(false);
@@ -251,31 +260,37 @@ const AdminEmployeeProfiles = () => {
       <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
         <Users size={22} /> Employee Profiles
       </h2>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {employees.map(employee => (
-          <div key={employee.id || employee._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <User className="text-blue-600" size={24} />
+      {employees.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">
+          No employees found. Check console for debugging info.
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {employees.map(employee => (
+            <div key={employee.id || employee._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <User className="text-blue-600" size={24} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">{employee.name}</h3>
+                  <p className="text-sm text-gray-600">{employee.position || employee.role}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">{employee.name}</h3>
-                <p className="text-sm text-gray-600">{employee.position || employee.role}</p>
+              <div className="space-y-2 text-sm text-gray-600 mb-4">
+                <p><span className="font-medium">Role:</span> {employee.role}</p>
+                <p><span className="font-medium">ID:</span> {employee.id || employee._id}</p>
               </div>
+              <button 
+                onClick={() => handleViewProfile(employee.id || employee._id)}
+                className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              >
+                View Profile
+              </button>
             </div>
-            <div className="space-y-2 text-sm text-gray-600 mb-4">
-              <p><span className="font-medium">Role:</span> {employee.role}</p>
-              <p><span className="font-medium">ID:</span> {employee.id || employee._id}</p>
-            </div>
-            <button 
-              onClick={() => handleViewProfile(employee.id || employee._id)}
-              className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-            >
-              View Profile
-            </button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
       {loading && <div className="text-center text-blue-600 mt-4">Loading...</div>}
     </div>
   );
@@ -492,13 +507,16 @@ const AdminSendNotifications = () => {
 
   useEffect(() => {
     const fetchEmployees = async () => {
+      console.log('Fetching employees for notifications from:', `${apiUrl}/auth/employees`);
       try {
-        const response = await axios.get(`${apiUrl}/employee/employee/list`, {
+        const response = await axios.get(`${apiUrl}/auth/employees`, {
           withCredentials: true
         });
+        console.log('Employees for notifications:', response.data);
         setEmployees(response.data.employees || []);
       } catch (err) {
-        console.error('Error fetching employees:', err);
+        console.error('Error fetching employees for notifications:', err);
+        console.error('Error response:', err.response?.data);
       }
     };
     fetchEmployees();
@@ -606,6 +624,33 @@ const AdminSendNotifications = () => {
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('attendance');
+  const [apiTest, setApiTest] = useState(null);
+
+  // Simple API connectivity test
+  useEffect(() => {
+    const testAPI = async () => {
+      try {
+        console.log('Testing API connectivity...');
+        
+        // Test 1: Simple health check
+        const healthResponse = await axios.get(`${apiUrl.replace('/api', '')}/health`);
+        console.log('Health check:', healthResponse.data);
+        
+        // Test 2: Debug route
+        const debugResponse = await axios.get(`${apiUrl}/auth/debug`, {
+          withCredentials: true
+        });
+        console.log('Debug route:', debugResponse.data);
+        
+        setApiTest('API Connected Successfully');
+      } catch (err) {
+        console.error('API Test failed:', err);
+        setApiTest(`API Test Failed: ${err.message}`);
+      }
+    };
+    
+    testAPI();
+  }, []);
 
   const TabButton = ({ id, label, icon: Icon, active, onClick }) => (
     <button
@@ -644,6 +689,13 @@ const AdminDashboard = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
           <p className="text-gray-600">Manage employees, attendance, leave, payroll, profiles, and notifications from one place.</p>
+          {apiTest && (
+            <div className={`mt-2 p-2 rounded text-sm ${
+              apiTest.includes('Successfully') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            }`}>
+              API Status: {apiTest}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-3 mb-8">
           <TabButton id="attendance" label="Attendance" icon={Users} active={activeTab === 'attendance'} onClick={setActiveTab} />
