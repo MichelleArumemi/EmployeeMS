@@ -29,7 +29,7 @@ router.get("/", async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
-</edits>
+// </edits>
 
 // GET /notifications/:userId - Fetch notifications for a specific user
 router.get("/:userId", async (req, res) => {

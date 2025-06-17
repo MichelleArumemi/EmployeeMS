@@ -17,6 +17,7 @@ import {
   History
 } from 'lucide-react';
 import axios from 'axios';
+import {io} from 'socket.io-client';
 
 // Employee Profile Component - View/Edit Own Profile
 const EmployeeProfile = () => {
@@ -451,6 +452,7 @@ const MyLeaveManagement = () => {
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
   useEffect(() => {
+    // Fetch leave history
     axios.get(`${apiUrl}/leave/my-requests`, { withCredentials: true })
       .then(res => {
         if (res.data.success) setLeaveHistory(res.data.data.map((item, idx) => ({
@@ -463,24 +465,49 @@ const MyLeaveManagement = () => {
           reason: item.reason
         })));
       });
-  }, []);
+
+    // Socket.io connection
+    const socket = io(apiUrl);
+    
+    socket.on('leave_status_update', (data) => {
+      setLeaveHistory(prev => 
+        prev.map(leave => 
+          leave.id === data.requestId.toString()
+            ? { 
+                ...leave, 
+                status: data.status.charAt(0).toUpperCase() + data.status.slice(1),
+                // Add any other updated fields you receive
+              }
+            : leave
+        )
+      );
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [apiUrl]);
 
   const handleSubmitLeave = (e) => {
     e.preventDefault();
     axios.post(`${apiUrl}/leave`, {
       startDate: leaveApplication.startDate,
       endDate: leaveApplication.endDate,
-      reason: leaveApplication.reason
+      reason: leaveApplication.reason,
+      type: leaveApplication.type
     }, { withCredentials: true })
       .then(res => {
         if (res.data.success) {
           setLeaveHistory(prev => [
             {
-              id: res.data.requestId,
-              type: leaveApplication.type === 'annual' ? 'Annual Leave' : leaveApplication.type === 'sick' ? 'Sick Leave' : 'Personal Leave',
+              id: res.data.data.requestId,
+              type: leaveApplication.type === 'annual' ? 'Annual Leave' : 
+                   leaveApplication.type === 'sick' ? 'Sick Leave' : 'Personal Leave',
               startDate: leaveApplication.startDate,
               endDate: leaveApplication.endDate,
-              days: Math.max(1, Math.round((new Date(leaveApplication.endDate) - new Date(leaveApplication.startDate)) / (1000 * 60 * 60 * 24)) + 1),
+              days: Math.max(1, Math.round(
+                (new Date(leaveApplication.endDate) - new Date(leaveApplication.startDate)) / (1000 * 60 * 60 * 24)
+              ) + 1),
               status: 'Pending',
               reason: leaveApplication.reason
             },

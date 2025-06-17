@@ -313,26 +313,55 @@ const AdminLeaveManagement = () => {
   }, []);
 
   // Approve/Reject leave request
+  // const handleAction = async (id, action) => {
+  //   setActionLoading(prev => ({ ...prev, [id]: true }));
+  //   setError(null);
+  //   try {
+  //     await axios.patch(`${apiUrl}/leave/${id}/status`, 
+  //       { status: action.toLowerCase() }, 
+  //       { withCredentials: true }
+  //     );
+  //     setLeaveRequests(prev => prev.map(lr => lr._id === id ? { ...lr, status: action } : lr));
+  //   } catch (err) {
+  //     console.error('Error updating leave status:', err);
+  //     if (err.response?.status === 401) {
+  //       setError('Authentication failed. Please login again.');
+  //     } else {
+  //       setError('Failed to update leave status');
+  //     }
+  //   } finally {
+  //     setActionLoading(prev => ({ ...prev, [id]: false }));
+  //   }
+  // };
+
   const handleAction = async (id, action) => {
-    setActionLoading(prev => ({ ...prev, [id]: true }));
-    setError(null);
-    try {
-      await axios.patch(`${apiUrl}/leave/${id}/status`, 
-        { status: action.toLowerCase() }, 
-        { withCredentials: true }
+  setActionLoading(prev => ({ ...prev, [id]: true }));
+  setError(null);
+  
+  try {
+    const response = await axios.patch(
+      `${apiUrl}/leave/${id}/status`, 
+      { status: action.toLowerCase() },
+      { withCredentials: true }
+    );
+
+    if (response.data.success) {
+      // Update local state
+      setLeaveRequests(prev => 
+        prev.map(lr => 
+          lr._id === id 
+            ? { ...lr, status: action.toLowerCase() } 
+            : lr
+        )
       );
-      setLeaveRequests(prev => prev.map(lr => lr._id === id ? { ...lr, status: action } : lr));
-    } catch (err) {
-      console.error('Error updating leave status:', err);
-      if (err.response?.status === 401) {
-        setError('Authentication failed. Please login again.');
-      } else {
-        setError('Failed to update leave status');
-      }
-    } finally {
-      setActionLoading(prev => ({ ...prev, [id]: false }));
     }
-  };
+  } catch (err) {
+    console.error('Error updating leave status:', err);
+    setError(err.response?.data?.message || 'Failed to update leave status');
+  } finally {
+    setActionLoading(prev => ({ ...prev, [id]: false }));
+  }
+};
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6">

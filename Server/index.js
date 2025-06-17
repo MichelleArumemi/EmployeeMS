@@ -65,8 +65,7 @@ console.log("✅ MongoDB connected");
 app.use(cors({
   origin: process.env.CLIENT_URL || "http://localhost:5173",
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"], // PATCH added here
 }));
 app.use(express.json());
 app.use(cookieParser());
