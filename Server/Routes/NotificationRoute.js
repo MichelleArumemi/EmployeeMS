@@ -1,15 +1,27 @@
 import express from "express";
-import Notification from "../models/Notification.js"; // You'll need to create this model
+import { getDB } from '../utils/db.js';
+import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
-// GET /notifications - Fetch all notifications
+// GET /notifications - Fetch notifications for current user
 router.get("/", async (req, res) => {
   try {
-    const notifications = await Notification.find({})
-      .sort({ created_at: -1 }) // Sort by created_at descending
-      .populate('recipient_id', 'name email') // Populate recipient details if needed
-      .populate('sender_id', 'name email'); // Populate sender details if needed
+    // Get current user ID from the auth middleware
+    const userId = req.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Authentication required" 
+      });
+    }
+
+    const db = getDB();
+    const notifications = await db.collection('notifications')
+      .find({ recipientId: new ObjectId(userId) })
+      .sort({ createdAt: -1 })
+      .toArray();
 
     res.status(200).json({ success: true, notifications });
   } catch (error) {
@@ -17,27 +29,22 @@ router.get("/", async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
+</edits>
 
 // GET /notifications/:userId - Fetch notifications for a specific user
 router.get("/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const notifications = await Notification.find({ recipient_id: userId })
-      .sort({ created_at: -1 })
-      .populate('sender_id', 'name email');
+    const db = getDB();
+    const notifications = await db.collection('notifications')
+      .find({ recipientId: new ObjectId(userId) })
+      .sort({ createdAt: -1 })
+      .toArray();
 
     res.status(200).json({ success: true, notifications });
   } catch (error) {
     console.error("Error fetching user notifications:", error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid user ID format" 
-      });
-    }
-    
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -62,36 +69,27 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const newNotification = new Notification({
+    const db = getDB();
+    const newNotification = {
       message,
-      recipient_id,
-      sender_id,
+      recipientId: new ObjectId(recipient_id),
+      senderId: sender_id ? new ObjectId(sender_id) : new ObjectId(req.id),
       type,
       title,
-      data,
-    });
+      data: data || {},
+      isRead: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
-    const savedNotification = await newNotification.save();
-    
-    // Populate the saved notification with sender details
-    const populatedNotification = await Notification.findById(savedNotification._id)
-      .populate('sender_id', 'name email')
-      .populate('recipient_id', 'name email');
+    const result = await db.collection('notifications').insertOne(newNotification);
 
     res.status(201).json({ 
       success: true, 
-      notification: populatedNotification 
+      notification: { ...newNotification, _id: result.insertedId }
     });
   } catch (error) {
     console.error("Error creating notification:", error);
-    
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: error.message 
-      });
-    }
-    
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -101,16 +99,19 @@ router.put("/:notificationId/read", async (req, res) => {
   const { notificationId } = req.params;
 
   try {
-    const updatedNotification = await Notification.findByIdAndUpdate(
-      notificationId,
+    const db = getDB();
+    const result = await db.collection('notifications').updateOne(
+      { _id: new ObjectId(notificationId) },
       { 
-        is_read: true,
-        read_at: new Date()
-      },
-      { new: true }
+        $set: {
+          isRead: true,
+          readAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
     );
 
-    if (!updatedNotification) {
+    if (result.matchedCount === 0) {
       return res.status(404).json({ 
         success: false, 
         message: "Notification not found" 
@@ -119,18 +120,10 @@ router.put("/:notificationId/read", async (req, res) => {
 
     res.status(200).json({ 
       success: true, 
-      notification: updatedNotification 
+      message: "Notification marked as read"
     });
   } catch (error) {
     console.error("Error marking notification as read:", error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid notification ID format" 
-      });
-    }
-    
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -140,11 +133,15 @@ router.put("/mark-all-read/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const result = await Notification.updateMany(
-      { recipient_id: userId, is_read: false },
+    const db = getDB();
+    const result = await db.collection('notifications').updateMany(
+      { recipientId: new ObjectId(userId), isRead: false },
       { 
-        is_read: true,
-        read_at: new Date()
+        $set: {
+          isRead: true,
+          readAt: new Date(),
+          updatedAt: new Date()
+        }
       }
     );
 
@@ -154,14 +151,6 @@ router.put("/mark-all-read/:userId", async (req, res) => {
     });
   } catch (error) {
     console.error("Error marking all notifications as read:", error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid user ID format" 
-      });
-    }
-    
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -171,9 +160,12 @@ router.delete("/:notificationId", async (req, res) => {
   const { notificationId } = req.params;
 
   try {
-    const deletedNotification = await Notification.findByIdAndDelete(notificationId);
+    const db = getDB();
+    const result = await db.collection('notifications').deleteOne({ 
+      _id: new ObjectId(notificationId) 
+    });
 
-    if (!deletedNotification) {
+    if (result.deletedCount === 0) {
       return res.status(404).json({ 
         success: false, 
         message: "Notification not found" 
@@ -186,14 +178,6 @@ router.delete("/:notificationId", async (req, res) => {
     });
   } catch (error) {
     console.error("Error deleting notification:", error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid notification ID format" 
-      });
-    }
-    
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -203,9 +187,10 @@ router.get("/unread/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const unreadCount = await Notification.countDocuments({
-      recipient_id: userId,
-      is_read: false
+    const db = getDB();
+    const unreadCount = await db.collection('notifications').countDocuments({
+      recipientId: new ObjectId(userId),
+      isRead: false
     });
 
     res.status(200).json({ 
@@ -214,14 +199,6 @@ router.get("/unread/:userId", async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting unread count:", error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid user ID format" 
-      });
-    }
-    
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });

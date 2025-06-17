@@ -1,6 +1,6 @@
 import express from "express";
-import ClockRecord from "../models/ClockRecords.js"; // You'll need to create this model
-import Employee from "../models/Employee.js"; // Assuming you have this model
+import { getDB } from '../utils/db.js';
+import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
@@ -12,8 +12,10 @@ router.get("/", async (req, res) => {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
+    const db = getDB();
+    
     // Count employees who clocked in today
-    const presentCount = await ClockRecord.countDocuments({
+    const presentCount = await db.collection("clock_records").countDocuments({
       clock_in: {
         $gte: startOfDay,
         $lte: endOfDay
@@ -21,9 +23,7 @@ router.get("/", async (req, res) => {
     });
 
     // Get total number of active employees
-    const totalEmployees = await Employee.countDocuments({ 
-      status: { $ne: 'inactive' } // Exclude inactive employees
-    });
+    const totalEmployees = await db.collection("employees").countDocuments({});
 
     // Calculate absent count
     const absentCount = totalEmployees - presentCount;
@@ -60,8 +60,10 @@ router.get("/date/:date", async (req, res) => {
     const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
     const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
 
+    const db = getDB();
+    
     // Count employees who clocked in on the specified date
-    const presentCount = await ClockRecord.countDocuments({
+    const presentCount = await db.collection("clock_records").countDocuments({
       clock_in: {
         $gte: startOfDay,
         $lte: endOfDay
@@ -69,9 +71,7 @@ router.get("/date/:date", async (req, res) => {
     });
 
     // Get total number of active employees
-    const totalEmployees = await Employee.countDocuments({ 
-      status: { $ne: 'inactive' }
-    });
+    const totalEmployees = await db.collection("employees").countDocuments({});
 
     const absentCount = totalEmployees - presentCount;
 
@@ -97,20 +97,36 @@ router.get("/detailed", async (req, res) => {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
+    const db = getDB();
+    
     // Get all clock records for today with employee details
-    const presentEmployees = await ClockRecord.find({
-      clock_in: {
-        $gte: startOfDay,
-        $lte: endOfDay
+    const presentEmployees = await db.collection("clock_records").aggregate([
+      {
+        $match: {
+          clock_in: {
+            $gte: startOfDay,
+            $lte: endOfDay
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "employee_id",
+          foreignField: "_id",
+          as: "employee_id"
+        }
+      },
+      {
+        $unwind: "$employee_id"
+      },
+      {
+        $sort: { clock_in: 1 }
       }
-    })
-    .populate('employee_id', 'name email department position')
-    .sort({ clock_in: 1 });
+    ]).toArray();
 
     // Get all active employees
-    const allEmployees = await Employee.find({ 
-      status: { $ne: 'inactive' } 
-    }).select('name email department position');
+    const allEmployees = await db.collection("employees").find({}).toArray();
 
     // Find absent employees
     const presentEmployeeIds = presentEmployees.map(record => record.employee_id._id.toString());
@@ -167,8 +183,10 @@ router.get("/summary/:period", async (req, res) => {
         });
     }
 
+    const db = getDB();
+    
     // Aggregate attendance data for the period
-    const attendanceData = await ClockRecord.aggregate([
+    const attendanceData = await db.collection("clock_records").aggregate([
       {
         $match: {
           clock_in: {
@@ -188,12 +206,10 @@ router.get("/summary/:period", async (req, res) => {
       {
         $sort: { "_id.date": 1 }
       }
-    ]);
+    ]).toArray();
 
     // Get total employees for calculating absent count
-    const totalEmployees = await Employee.countDocuments({ 
-      status: { $ne: 'inactive' }
-    });
+    const totalEmployees = await db.collection("employees").countDocuments({});
 
     // Add absent count to each day
     const summaryData = attendanceData.map(item => ({

@@ -689,40 +689,58 @@ const MyPayroll = () => {
 
 // My Notifications
 const MyNotifications = () => {
-  const [notifications] = useState([
-    {
-      id: 1,
-      type: 'leave',
-      title: 'Leave Application Approved',
-      message: 'Your annual leave request for May 1-5 has been approved.',
-      date: '2024-06-14',
-      read: false
-    },
-    {
-      id: 2,
-      type: 'payroll',
-      title: 'Payroll Processed',
-      message: 'Your May 2024 salary has been processed and will be credited soon.',
-      date: '2024-06-01',
-      read: true
-    },
-    {
-      id: 3,
-      type: 'admin',
-      title: 'Company Policy Update',
-      message: 'Please review the updated remote work policy in the employee handbook.',
-      date: '2024-05-28',
-      read: true
-    },
-    {
-      id: 4,
-      type: 'leave',
-      title: 'Leave Balance Update',
-      message: 'Your leave balance has been updated for the new quarter.',
-      date: '2024-04-01',
-      read: true
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Get current user from auth context or localStorage
+        const response = await axios.get(`${apiUrl}/notification`, {
+          withCredentials: true
+        });
+        
+        if (response.data.success) {
+          const formattedNotifications = response.data.notifications.map(notif => ({
+            id: notif._id,
+            type: notif.type || 'admin',
+            title: notif.title || 'Notification',
+            message: notif.message,
+            date: new Date(notif.createdAt).toLocaleDateString(),
+            read: notif.isRead
+          }));
+          setNotifications(formattedNotifications);
+        }
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
+        setError('Failed to fetch notifications');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
+  const markAsRead = async (notificationId) => {
+    try {
+      await axios.put(`${apiUrl}/notification/${notificationId}/read`, {}, {
+        withCredentials: true
+      });
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === notificationId ? { ...notif, read: true } : notif
+        )
+      );
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
     }
-  ]);
+  };
 
   const getNotificationIcon = (type) => {
     switch (type) {
@@ -739,36 +757,58 @@ const MyNotifications = () => {
         <Bell size={18} /> My Notifications
       </h3>
       
-      <div className="space-y-3">
-        {notifications.map(notification => (
-          <div key={notification.id} className={`p-4 border rounded-lg ${
-            notification.read ? 'border-gray-200 bg-gray-50' : 'border-blue-200 bg-blue-50'
-          }`}>
-            <div className="flex items-start gap-3">
-              <div className="mt-1">
-                {getNotificationIcon(notification.type)}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <h4 className={`font-medium ${notification.read ? 'text-gray-900' : 'text-blue-900'}`}>
-                    {notification.title}
-                  </h4>
-                  <span className="text-xs text-gray-500">{notification.date}</span>
-                </div>
-                <p className={`text-sm mt-1 ${notification.read ? 'text-gray-600' : 'text-blue-800'}`}>
-                  {notification.message}
-                </p>
-                {!notification.read && (
-                  <div className="mt-2">
-                    <span className="inline-block w-2 h-2 bg-blue-600 rounded-full"></span>
-                    <span className="text-xs text-blue-600 ml-2">New</span>
-                  </div>
-                )}
-              </div>
+      {error && (
+        <div className="text-red-600 text-sm mb-4 p-3 bg-red-50 rounded-lg">
+          {error}
+        </div>
+      )}
+      
+      {loading ? (
+        <div className="text-center py-8">
+          <div className="text-gray-500">Loading notifications...</div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notifications.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No notifications yet
             </div>
-          </div>
-        ))}
-      </div>
+          ) : (
+            notifications.map(notification => (
+              <div 
+                key={notification.id} 
+                className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                  notification.read ? 'border-gray-200 bg-gray-50' : 'border-blue-200 bg-blue-50'
+                }`}
+                onClick={() => !notification.read && markAsRead(notification.id)}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-1">
+                    {getNotificationIcon(notification.type)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between">
+                      <h4 className={`font-medium ${notification.read ? 'text-gray-900' : 'text-blue-900'}`}>
+                        {notification.title}
+                      </h4>
+                      <span className="text-xs text-gray-500">{notification.date}</span>
+                    </div>
+                    <p className={`text-sm mt-1 ${notification.read ? 'text-gray-600' : 'text-blue-800'}`}>
+                      {notification.message}
+                    </p>
+                    {!notification.read && (
+                      <div className="mt-2">
+                        <span className="inline-block w-2 h-2 bg-blue-600 rounded-full"></span>
+                        <span className="text-xs text-blue-600 ml-2">New</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -28,37 +28,73 @@ const getAuthHeaders = () => {
 
 // --- Admin Attendance: View employees currently at the office ---
 const AdminAttendance = () => {
-  // Dummy data for employees present
-  const presentEmployees = [
-    { id: 1, name: 'Alice Johnson', department: 'Sales', checkIn: '09:05 AM' },
-    { id: 2, name: 'Bob Wilson', department: 'IT', checkIn: '08:55 AM' },
-    { id: 3, name: 'David Brown', department: 'Finance', checkIn: '09:10 AM' },
-  ];
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchAttendanceData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await axios.get(`${apiUrl}/attendance/detailed`, {
+          withCredentials: true
+        });
+        if (response.data.success) {
+          setAttendanceData(response.data.attendance.present.employees || []);
+        }
+      } catch (err) {
+        console.error('Error fetching attendance data:', err);
+        setError('Failed to fetch attendance data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAttendanceData();
+  }, []);
+
   return (
     <div className="bg-white rounded-xl shadow-lg p-6">
       <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
         <Users size={22} /> Employees Present Today
       </h2>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-3 px-4 text-gray-600 font-medium">Name</th>
-              <th className="text-left py-3 px-4 text-gray-600 font-medium">Department</th>
-              <th className="text-left py-3 px-4 text-gray-600 font-medium">Check-In Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {presentEmployees.map(emp => (
-              <tr key={emp.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="py-3 px-4 text-gray-900">{emp.name}</td>
-                <td className="py-3 px-4 text-gray-600">{emp.department}</td>
-                <td className="py-3 px-4 text-gray-600">{emp.checkIn}</td>
+      {error && <div className="text-red-600 mb-4">{error}</div>}
+      {loading ? (
+        <div className="text-center py-4">Loading attendance data...</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 text-gray-600 font-medium">Name</th>
+                <th className="text-left py-3 px-4 text-gray-600 font-medium">Department</th>
+                <th className="text-left py-3 px-4 text-gray-600 font-medium">Check-In Time</th>
+                <th className="text-left py-3 px-4 text-gray-600 font-medium">Location</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {attendanceData.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-4 text-center text-gray-500">No employees present today</td>
+                </tr>
+              ) : attendanceData.map(record => (
+                <tr key={record._id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 text-gray-900">{record.employee_id?.name || 'N/A'}</td>
+                  <td className="py-3 px-4 text-gray-600">{record.employee_id?.department || 'N/A'}</td>
+                  <td className="py-3 px-4 text-gray-600">
+                    {record.clock_in ? new Date(record.clock_in).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    }) : 'N/A'}
+                  </td>
+                  <td className="py-3 px-4 text-gray-600">{record.location || 'N/A'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
@@ -75,8 +111,8 @@ const AdminEmployeeProfiles = () => {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await axios.get(`${apiUrl}/auth/employees`, {
-          headers: getAuthHeaders()
+        const response = await axios.get(`${apiUrl}/employee/employee/list`, {
+          withCredentials: true
         });
         setEmployees(response.data.employees || []);
         setError(null);
@@ -99,10 +135,10 @@ const AdminEmployeeProfiles = () => {
   const handleViewProfile = async (id) => {
     setLoading(true);
     try {
-      const response = await axios.get(`${apiUrl}/auth/employees/${id}`, {
-        headers: getAuthHeaders()
+      const response = await axios.get(`${apiUrl}/employee/detail/${id}`, {
+        withCredentials: true
       });
-      setProfile(response.data.employee);
+      setProfile(response.data.Result?.[0] || response.data.employee);
       setFiles(response.data.files || []);
       setSelectedEmployee(id);
       setError(null);
@@ -217,22 +253,22 @@ const AdminEmployeeProfiles = () => {
       </h2>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {employees.map(employee => (
-          <div key={employee._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+          <div key={employee.id || employee._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                 <User className="text-blue-600" size={24} />
               </div>
               <div>
                 <h3 className="font-semibold text-gray-900">{employee.name}</h3>
-                <p className="text-sm text-gray-600">{employee.position}</p>
+                <p className="text-sm text-gray-600">{employee.position || employee.role}</p>
               </div>
             </div>
             <div className="space-y-2 text-sm text-gray-600 mb-4">
-              <p><span className="font-medium">Department:</span> {employee.department}</p>
-              <p><span className="font-medium">Email:</span> {employee.email}</p>
+              <p><span className="font-medium">Role:</span> {employee.role}</p>
+              <p><span className="font-medium">ID:</span> {employee.id || employee._id}</p>
             </div>
             <button 
-              onClick={() => handleViewProfile(employee._id)}
+              onClick={() => handleViewProfile(employee.id || employee._id)}
               className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
             >
               View Profile
@@ -258,8 +294,8 @@ const AdminLeaveManagement = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.get(`${apiUrl}/auth/pending`, {
-          headers: getAuthHeaders()
+        const response = await axios.get(`${apiUrl}/leave/pending`, {
+          withCredentials: true
         });
         setLeaveRequests(response.data.data || []);
       } catch (err) {
@@ -283,7 +319,7 @@ const AdminLeaveManagement = () => {
     try {
       await axios.patch(`${apiUrl}/leave/${id}/status`, 
         { status: action.toLowerCase() }, 
-        { headers: getAuthHeaders() }
+        { withCredentials: true }
       );
       setLeaveRequests(prev => prev.map(lr => lr._id === id ? { ...lr, status: action } : lr));
     } catch (err) {
@@ -418,29 +454,123 @@ const AdminPayroll = () => {
 // --- Admin Send Notifications ---
 const AdminSendNotifications = () => {
   const [message, setMessage] = useState('');
+  const [title, setTitle] = useState('');
+  const [recipient, setRecipient] = useState('all');
+  const [employees, setEmployees] = useState([]);
   const [sent, setSent] = useState(false);
-  const handleSend = (e) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/employee/employee/list`, {
+          withCredentials: true
+        });
+        setEmployees(response.data.employees || []);
+      } catch (err) {
+        console.error('Error fetching employees:', err);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
+  const handleSend = async (e) => {
     e.preventDefault();
-    setSent(true);
-    setTimeout(() => setSent(false), 2000);
-    setMessage('');
+    if (!message.trim()) {
+      setError('Message is required');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (recipient === 'all') {
+        // Send to all employees
+        for (const employee of employees) {
+          await axios.post(`${apiUrl}/notification`, {
+            title: title || 'Admin Notification',
+            message: message,
+            recipient_id: employee.id || employee._id,
+            type: 'admin'
+          }, { withCredentials: true });
+        }
+      } else {
+        // Send to specific employee
+        await axios.post(`${apiUrl}/notification`, {
+          title: title || 'Admin Notification',
+          message: message,
+          recipient_id: recipient,
+          type: 'admin'
+        }, { withCredentials: true });
+      }
+
+      setSent(true);
+      setTimeout(() => setSent(false), 3000);
+      setMessage('');
+      setTitle('');
+      setRecipient('all');
+    } catch (err) {
+      console.error('Error sending notification:', err);
+      setError('Failed to send notification');
+    } finally {
+      setLoading(false);
+    }
   };
+
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 max-w-xl mx-auto">
       <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
         <Bell size={22} /> Send Notification to Employees
       </h2>
-      <div className="space-y-4">
-        <textarea
-          className="w-full p-3 border border-gray-300 rounded-lg"
-          rows={4}
-          placeholder="Type your notification message here..."
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-        />
-        <button onClick={handleSend} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Send Notification</button>
-        {sent && <div className="text-green-600 mt-2">Notification sent!</div>}
-      </div>
+      <form onSubmit={handleSend} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Title (Optional)</label>
+          <input
+            type="text"
+            className="w-full p-3 border border-gray-300 rounded-lg"
+            placeholder="Notification title..."
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Send To</label>
+          <select
+            className="w-full p-3 border border-gray-300 rounded-lg"
+            value={recipient}
+            onChange={e => setRecipient(e.target.value)}
+          >
+            <option value="all">All Employees</option>
+            {employees.map(emp => (
+              <option key={emp.id || emp._id} value={emp.id || emp._id}>
+                {emp.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+          <textarea
+            className="w-full p-3 border border-gray-300 rounded-lg"
+            rows={4}
+            placeholder="Type your notification message here..."
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            required
+          />
+        </div>
+        {error && <div className="text-red-600 text-sm">{error}</div>}
+        <button 
+          type="submit" 
+          disabled={loading}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? 'Sending...' : 'Send Notification'}
+        </button>
+        {sent && <div className="text-green-600 mt-2">Notification sent successfully!</div>}
+      </form>
     </div>
   );
 };
