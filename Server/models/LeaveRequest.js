@@ -5,8 +5,7 @@ const leaveRequestSchema = new Schema({
   userId: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
   },
   
   // Employee details (for easy access without population)
@@ -70,8 +69,7 @@ const leaveRequestSchema = new Schema({
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected', 'cancelled'],
-    default: 'pending',
-    index: true
+    default: 'pending'
   },
   
   // Approval details

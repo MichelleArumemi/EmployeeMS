@@ -7,8 +7,7 @@ const EmployeeSchema = new mongoose.Schema({
   },
   email: { 
     type: String, 
-    required: true, 
-    unique: true 
+    required: true 
   },
   password: { 
     type: String, 
@@ -31,6 +30,8 @@ const EmployeeSchema = new mongoose.Schema({
     ref: "Category" 
   }
 });
+
+EmployeeSchema.index({ email: 1 }, { unique: true });
 
 // Check if model already exists before creating it
 const Employee = mongoose.models.Employee || mongoose.model("Employee", EmployeeSchema);

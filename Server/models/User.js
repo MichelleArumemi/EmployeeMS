@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema({
   email: { 
     type: String, 
     required: [true, 'Email is required'],
-    unique: true,
+    unique: true, // Added unique constraint here (removed the schema-level index)
     lowercase: true,
     trim: true,
     validate: {
@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema({
     minlength: [8, 'Password must be at least 8 characters'],
     select: false // Never return password in queries
   },
-   role: { 
+  role: { 
     type: String, 
     enum: ["admin", "employee"], 
     default: "employee",
@@ -53,4 +53,6 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-export default mongoose.model("User", userSchema);
+// Removed the duplicate index: userSchema.index({ email: 1 }, { unique: true });
+
+export default mongoose.models.User || mongoose.model("User", userSchema);

@@ -1,4 +1,3 @@
-// context/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
@@ -89,6 +88,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Updated value object with setAuth and verifyAuth
   const value = {
     user,
     isAuthenticated,
@@ -96,6 +96,11 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     checkAuthStatus,
+    setAuth: (authData) => {
+      setUser(authData.user);
+      setIsAuthenticated(authData.isAuthenticated);
+    },
+    verifyAuth: checkAuthStatus
   };
 
   return (
@@ -104,3 +109,11 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
+// Add at the top or wherever appropriate in AuthContext.jsx
+export const ROLES = {
+  admin: 'admin',
+  employee: 'employee',
+  // add other roles as needed
+};
+export { AuthContext };

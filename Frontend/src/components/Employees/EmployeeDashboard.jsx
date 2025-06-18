@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import MyNotifications from '../MyNotifications'; // Adjust the path if needed
 import {
   User,
   Bell,
@@ -811,125 +812,166 @@ const MyPayroll = () => {
 };
 
 // My Notifications
-const MyNotifications = () => {
+const EmployeeNotifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
   useEffect(() => {
     const fetchNotifications = async () => {
-      setLoading(true);
-      setError(null);
       try {
-        // Get current user from auth context or localStorage
-        const response = await axios.get(`${apiUrl}/notification`, {
+        const response = await axios.get(`${apiUrl}/notifications/mynotifications`, {
           withCredentials: true
         });
-        
         if (response.data.success) {
-          const formattedNotifications = response.data.notifications.map(notif => ({
-            id: notif._id,
-            type: notif.type || 'admin',
-            title: notif.title || 'Notification',
-            message: notif.message,
-            date: new Date(notif.createdAt).toLocaleDateString(),
-            read: notif.isRead
-          }));
-          setNotifications(formattedNotifications);
+          setNotifications(response.data.data);
+          setUnreadCount(response.data.data.filter(n => !n.isRead).length);
         }
       } catch (err) {
         console.error('Error fetching notifications:', err);
-        setError('Failed to fetch notifications');
+        setError('Failed to load notifications');
       } finally {
         setLoading(false);
       }
     };
 
     fetchNotifications();
-  }, []);
+
+    // Socket.io setup
+    const socket = io(apiUrl);
+    
+    socket.on('new_notification', (newNotification) => {
+      setNotifications(prev => [newNotification, ...prev]);
+      setUnreadCount(prev => prev + 1);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [apiUrl]);
 
   const markAsRead = async (notificationId) => {
     try {
-      await axios.put(`${apiUrl}/notification/${notificationId}/read`, {}, {
-        withCredentials: true
-      });
-      setNotifications(prev => 
-        prev.map(notif => 
-          notif.id === notificationId ? { ...notif, read: true } : notif
+      await axios.patch(
+        `${apiUrl}/notifications/${notificationId}/read`,
+        {},
+        { withCredentials: true }
+      );
+      
+      setNotifications(prev =>
+        prev.map(notification =>
+          notification._id === notificationId
+            ? { ...notification, isRead: true }
+            : notification
         )
       );
+      
+      setUnreadCount(prev => prev - 1);
     } catch (err) {
       console.error('Error marking notification as read:', err);
     }
   };
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'leave': return <Calendar size={16} className="text-blue-600" />;
-      case 'payroll': return <DollarSign size={16} className="text-green-600" />;
-      case 'admin': return <Bell size={16} className="text-purple-600" />;
-      default: return <Bell size={16} className="text-gray-600" />;
+  const markAllAsRead = async () => {
+    try {
+      const unreadIds = notifications
+        .filter(n => !n.isRead)
+        .map(n => n._id);
+      
+      if (unreadIds.length > 0) {
+        await Promise.all(
+          unreadIds.map(id => 
+            axios.patch(
+              `${apiUrl}/notifications/${id}/read`,
+              {},
+              { withCredentials: true }
+            )
+          )
+        );
+        
+        setNotifications(prev =>
+          prev.map(notification => ({
+            ...notification,
+            isRead: true
+          }))
+        );
+        
+        setUnreadCount(0);
+      }
+    } catch (err) {
+      console.error('Error marking all as read:', err);
     }
   };
 
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-        <Bell size={18} /> My Notifications
-      </h3>
-      
-      {error && (
-        <div className="text-red-600 text-sm mb-4 p-3 bg-red-50 rounded-lg">
-          {error}
-        </div>
-      )}
-      
+    <div className="bg-white rounded-xl shadow-lg p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Bell size={22} /> My Notifications
+          {unreadCount > 0 && (
+            <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+              {unreadCount}
+            </span>
+          )}
+        </h2>
+        {unreadCount > 0 && (
+          <button
+            onClick={markAllAsRead}
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+          >
+            <Check size={16} /> Mark all as read
+          </button>
+        )}
+      </div>
+
+      {error && <div className="text-red-600 mb-4">{error}</div>}
+
       {loading ? (
-        <div className="text-center py-8">
-          <div className="text-gray-500">Loading notifications...</div>
+        <div>Loading notifications...</div>
+      ) : notifications.length === 0 ? (
+        <div className="text-gray-500 text-center py-8">
+          You don't have any notifications yet
         </div>
       ) : (
         <div className="space-y-3">
-          {notifications.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No notifications yet
-            </div>
-          ) : (
-            notifications.map(notification => (
-              <div 
-                key={notification.id} 
-                className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                  notification.read ? 'border-gray-200 bg-gray-50' : 'border-blue-200 bg-blue-50'
-                }`}
-                onClick={() => !notification.read && markAsRead(notification.id)}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">
-                    {getNotificationIcon(notification.type)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between">
-                      <h4 className={`font-medium ${notification.read ? 'text-gray-900' : 'text-blue-900'}`}>
-                        {notification.title}
-                      </h4>
-                      <span className="text-xs text-gray-500">{notification.date}</span>
-                    </div>
-                    <p className={`text-sm mt-1 ${notification.read ? 'text-gray-600' : 'text-blue-800'}`}>
-                      {notification.message}
-                    </p>
-                    {!notification.read && (
-                      <div className="mt-2">
-                        <span className="inline-block w-2 h-2 bg-blue-600 rounded-full"></span>
-                        <span className="text-xs text-blue-600 ml-2">New</span>
-                      </div>
-                    )}
+          {notifications.map(notification => (
+            <div
+              key={notification._id}
+              className={`p-4 border rounded-lg ${
+                notification.isRead
+                  ? 'border-gray-200 bg-white'
+                  : 'border-blue-200 bg-blue-50'
+              }`}
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-medium text-gray-900">
+                    {notification.title}
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {notification.message}
+                  </p>
+                  <div className="flex items-center mt-2 text-xs text-gray-500">
+                    {notification.sender?.name || 'System'}
+                    <span className="mx-2">•</span>
+                    {new Date(notification.createdAt).toLocaleString()}
                   </div>
                 </div>
+                {!notification.isRead && (
+                  <button
+                    onClick={() => markAsRead(notification._id)}
+                    className="text-blue-600 hover:text-blue-800 p-1"
+                    title="Mark as read"
+                  >
+                    <Check size={16} />
+                  </button>
+                )}
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
       )}
     </div>

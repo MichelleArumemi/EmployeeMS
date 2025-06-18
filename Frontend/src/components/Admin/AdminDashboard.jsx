@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { Send } from 'lucide-react';
+
+// or, if you use another icon library, import Send from there
 import { 
   Users, 
   Bell, 
@@ -496,128 +499,403 @@ const AdminPayroll = () => {
 };
 
 // --- Admin Send Notifications ---
+
 const AdminSendNotifications = () => {
-  const [message, setMessage] = useState('');
-  const [title, setTitle] = useState('');
-  const [recipient, setRecipient] = useState('all');
+  const [notifications, setNotifications] = useState([]);
+  const [showComposer, setShowComposer] = useState(false);
+  const [newNotification, setNewNotification] = useState({
+    title: '',
+    message: '',
+    recipientIds: []
+  });
   const [employees, setEmployees] = useState([]);
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
   useEffect(() => {
+    // Fetch employees for recipient selection
     const fetchEmployees = async () => {
-      console.log('Fetching employees for notifications from:', `${apiUrl}/auth/employees`);
       try {
-        const response = await axios.get(`${apiUrl}/auth/employees`, {
+        const response = await axios.get(`${apiUrl}/users/employees`, {
           withCredentials: true
         });
-        console.log('Employees for notifications:', response.data);
-        setEmployees(response.data.employees || []);
+        setEmployees(response.data.data || []);
       } catch (err) {
-        console.error('Error fetching employees for notifications:', err);
-        console.error('Error response:', err.response?.data);
+        console.error('Error fetching employees:', err);
+        setError('Failed to load employee list');
       }
     };
+
     fetchEmployees();
-  }, []);
 
-  const handleSend = async (e) => {
+    // Socket.io setup
+    const socket = io(apiUrl);
+    socket.on('notification_error', (error) => {
+      setError(error.message);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [apiUrl]);
+
+const AdminSendNotifications = () => {
+  const [showComposer, setShowComposer] = useState(false);
+  const [newNotification, setNewNotification] = useState({
+    title: '',
+    message: '',
+    recipientIds: []
+  });
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+  // Fetch employees for recipient selection
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`${apiUrl}/users`, {
+          withCredentials: true
+        });
+        setEmployees(response.data.data || []);
+      } catch (err) {
+        console.error('Error fetching employees:', err);
+        setError('Failed to load employee list');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmployees();
+  }, [apiUrl]);
+
+  const handleSendNotification = async (e) => {
     e.preventDefault();
-    if (!message.trim()) {
-      setError('Message is required');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
     try {
-      if (recipient === 'all') {
-        // Send to all employees
-        for (const employee of employees) {
-          await axios.post(`${apiUrl}/notification`, {
-            title: title || 'Admin Notification',
-            message: message,
-            recipient_id: employee.id || employee._id,
-            type: 'admin'
-          }, { withCredentials: true });
-        }
-      } else {
-        // Send to specific employee
-        await axios.post(`${apiUrl}/notification`, {
-          title: title || 'Admin Notification',
-          message: message,
-          recipient_id: recipient,
-          type: 'admin'
-        }, { withCredentials: true });
+      setError(null);
+      setSuccess(null);
+      
+      if (!newNotification.title || !newNotification.message) {
+        throw new Error('Title and message are required');
       }
 
-      setSent(true);
-      setTimeout(() => setSent(false), 3000);
-      setMessage('');
-      setTitle('');
-      setRecipient('all');
+      if (newNotification.recipientIds.length === 0) {
+        throw new Error('Please select at least one recipient');
+      }
+
+      const response = await axios.post(`${apiUrl}/notifications`, {
+        title: newNotification.title,
+        message: newNotification.message,
+        recipientIds: newNotification.recipientIds
+      }, { withCredentials: true });
+
+      if (response.data.success) {
+        setShowComposer(false);
+        setNewNotification({
+          title: '',
+          message: '',
+          recipientIds: []
+        });
+        setSuccess('Notification sent successfully!');
+      }
     } catch (err) {
       console.error('Error sending notification:', err);
-      setError('Failed to send notification');
-    } finally {
-      setLoading(false);
+      setError(err.response?.data?.message || err.message || 'Failed to send notification');
     }
   };
 
+  const toggleRecipient = (employeeId) => {
+    setNewNotification(prev => ({
+      ...prev,
+      recipientIds: prev.recipientIds.includes(employeeId)
+        ? prev.recipientIds.filter(id => id !== employeeId)
+        : [...prev.recipientIds, employeeId]
+    }));
+  };
+
+  const selectAllRecipients = () => {
+    setNewNotification(prev => ({
+      ...prev,
+      recipientIds: prev.recipientIds.length === employees.length 
+        ? [] 
+        : employees.map(emp => emp._id)
+    }));
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 max-w-xl mx-auto">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-        <Bell size={22} /> Send Notification to Employees
-      </h2>
-      <form onSubmit={handleSend} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title (Optional)</label>
-          <input
-            type="text"
-            className="w-full p-3 border border-gray-300 rounded-lg"
-            placeholder="Notification title..."
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Send To</label>
-          <select
-            className="w-full p-3 border border-gray-300 rounded-lg"
-            value={recipient}
-            onChange={e => setRecipient(e.target.value)}
-          >
-            <option value="all">All Employees</option>
-            {employees.map(emp => (
-              <option key={emp.id || emp._id} value={emp.id || emp._id}>
-                {emp.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-          <textarea
-            className="w-full p-3 border border-gray-300 rounded-lg"
-            rows={4}
-            placeholder="Type your notification message here..."
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            required
-          />
-        </div>
-        {error && <div className="text-red-600 text-sm">{error}</div>}
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Bell className="text-blue-600" size={20} />
+          Employee Notifications
+        </h2>
+        <button
+          onClick={() => setShowComposer(!showComposer)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
         >
-          {loading ? 'Sending...' : 'Send Notification'}
+          {showComposer ? (
+            <>
+              <X size={16} /> Cancel
+            </>
+          ) : (
+            <>
+              <Send size={16} /> New Notification
+            </>
+          )}
         </button>
-        {sent && <div className="text-green-600 mt-2">Notification sent successfully!</div>}
-      </form>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-md">
+          {success}
+        </div>
+      )}
+
+      {showComposer && (
+        <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 mb-6">
+          <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+            <Send size={18} /> Compose New Notification
+          </h3>
+          
+          <form onSubmit={handleSendNotification} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Title *
+              </label>
+              <input
+                type="text"
+                value={newNotification.title}
+                onChange={(e) => setNewNotification({
+                  ...newNotification,
+                  title: e.target.value
+                })}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Notification title"
+                required
+                maxLength={100}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Message *
+              </label>
+              <textarea
+                value={newNotification.message}
+                onChange={(e) => setNewNotification({
+                  ...newNotification,
+                  message: e.target.value
+                })}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                rows="4"
+                placeholder="Enter your notification message here..."
+                required
+              />
+            </div>
+            
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Users size={16} /> Recipients *
+                </label>
+                <button
+                  type="button"
+                  onClick={selectAllRecipients}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  {newNotification.recipientIds.length === employees.length 
+                    ? 'Deselect all' 
+                    : 'Select all'}
+                </button>
+              </div>
+              
+              <div className="bg-white border border-gray-200 rounded-md p-3 max-h-60 overflow-y-auto">
+                {loading ? (
+                  <div className="text-center py-4 text-gray-500">
+                    Loading employees...
+                  </div>
+                ) : employees.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500">
+                    No employees found
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {employees.map(employee => (
+                      <div key={employee._id} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`emp-${employee._id}`}
+                          checked={newNotification.recipientIds.includes(employee._id)}
+                          onChange={() => toggleRecipient(employee._id)}
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <label 
+                          htmlFor={`emp-${employee._id}`} 
+                          className="ml-2 text-sm text-gray-700"
+                        >
+                          {employee.name} ({employee.department || 'No department'})
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Selected: {newNotification.recipientIds.length} employee(s)
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowComposer(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || newNotification.recipientIds.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? 'Sending...' : (
+                  <>
+                    <Send size={16} /> Send Notification
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Notification history/sent items could be added here */}
+    </div>
+  );
+};
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Bell size={22} /> Notifications
+        </h2>
+        <button
+          onClick={() => setShowComposer(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+        >
+          <Send size={16} /> New Notification
+        </button>
+      </div>
+
+      {error && <div className="text-red-600 mb-4">{error}</div>}
+
+      {showComposer && (
+        <div className="mb-8 bg-gray-50 p-6 rounded-lg border border-gray-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">Compose Notification</h3>
+            <button onClick={() => setShowComposer(false)} className="text-gray-500">
+              <X size={20} />
+            </button>
+          </div>
+          
+          <form onSubmit={handleSendNotification} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+              <input
+                type="text"
+                value={newNotification.title}
+                onChange={(e) => setNewNotification({...newNotification, title: e.target.value})}
+                className="w-full p-2 border border-gray-300 rounded-lg"
+                required
+                maxLength={100}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+              <textarea
+                value={newNotification.message}
+                onChange={(e) => setNewNotification({...newNotification, message: e.target.value})}
+                className="w-full p-2 border border-gray-300 rounded-lg"
+                rows="4"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <Users size={16} /> Recipients
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-2 border border-gray-200 rounded-lg">
+                {employees.map(employee => (
+                  <div key={employee._id} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id={`emp-${employee._id}`}
+                      checked={newNotification.recipientIds.includes(employee._id)}
+                      onChange={() => toggleRecipient(employee._id)}
+                      className="mr-2"
+                    />
+                    <label htmlFor={`emp-${employee._id}`} className="text-sm">
+                      {employee.name} ({employee.department})
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <button
+              type="submit"
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+              disabled={newNotification.recipientIds.length === 0}
+            >
+              <Send size={16} /> Send Notification
+            </button>
+          </form>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-gray-900">Recent Notifications</h3>
+        
+        {loading ? (
+          <div>Loading notifications...</div>
+        ) : notifications.length === 0 ? (
+          <div className="text-gray-500 text-center py-8">No notifications sent yet</div>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map(notification => (
+              <div key={notification._id} className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-medium text-gray-900">{notification.title}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Sent to {notification.recipientIds.length} employee(s)
+                    </p>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {new Date(notification.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
