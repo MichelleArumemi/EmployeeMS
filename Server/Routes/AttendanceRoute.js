@@ -51,6 +51,45 @@ router.get("/detailed", async (req, res) => {
 
     const db = getDB();
     
+    // Check if required collections exist
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(col => col.name);
+    
+    const hasClockRecords = collectionNames.includes('clock_records');
+    const hasEmployees = collectionNames.includes('employees');
+    
+    console.log('Available collections:', collectionNames);
+    console.log('Has clock_records:', hasClockRecords);
+    console.log('Has employees:', hasEmployees);
+    
+    if (!hasEmployees) {
+      return res.status(200).json({ 
+        success: true, 
+        attendance: {
+          present: { count: 0, employees: [] },
+          absent: { count: 0, employees: [] },
+          total: 0
+        },
+        message: 'No employees collection found. Create test data first.',
+        debug: { collections: collectionNames }
+      });
+    }
+    
+    if (!hasClockRecords) {
+      // If no clock records collection, all employees are absent
+      const allEmployees = await db.collection("employees").find({}).toArray();
+      return res.status(200).json({ 
+        success: true, 
+        attendance: {
+          present: { count: 0, employees: [] },
+          absent: { count: allEmployees.length, employees: allEmployees },
+          total: allEmployees.length
+        },
+        message: 'No clock_records collection found. All employees marked as absent.',
+        debug: { collections: collectionNames }
+      });
+    }
+    
     // Get all clock records for today with employee details
     const presentEmployees = await db.collection("clock_records").aggregate([
       {
@@ -70,7 +109,10 @@ router.get("/detailed", async (req, res) => {
         }
       },
       {
-        $unwind: "$employee_id"
+        $unwind: {
+          path: "$employee_id",
+          preserveNullAndEmptyArrays: false
+        }
       },
       {
         $sort: { clock_in: 1 }
@@ -101,11 +143,24 @@ router.get("/detailed", async (req, res) => {
           employees: absentEmployees
         },
         total: allEmployees.length
+      },
+      debug: {
+        collections: collectionNames,
+        dateRange: { startOfDay, endOfDay },
+        queryResults: {
+          clockRecordsToday: presentEmployees.length,
+          totalEmployees: allEmployees.length
+        }
       }
     });
   } catch (error) {
     console.error("Error fetching detailed attendance:", error);
-    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: "Server Error", 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

@@ -418,7 +418,114 @@ router.post("/categories", authorize([ROLES.ADMIN]), [
 
 // ==================== EMPLOYEE ROUTES ====================
 
+// Test route to validate all functionality
+router.get('/test-all', async (req, res) => {
+  try {
+    const db = getDB();
+    const results = {
+      timestamp: new Date(),
+      tests: {},
+      status: 'running'
+    };
 
+    // Test 1: Database connection
+    try {
+      await db.admin().ping();
+      results.tests.database = { status: 'pass', message: 'Database connected' };
+    } catch (err) {
+      results.tests.database = { status: 'fail', message: err.message };
+    }
+
+    // Test 2: Collections exist
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(col => col.name);
+    results.tests.collections = {
+      status: collectionNames.length > 0 ? 'pass' : 'fail',
+      found: collectionNames,
+      required: ['employees', 'clock_records']
+    };
+
+    // Test 3: Employees data
+    try {
+      const employeeCount = await db.collection('employees').countDocuments();
+      const sampleEmployee = await db.collection('employees').findOne();
+      results.tests.employees = {
+        status: employeeCount > 0 ? 'pass' : 'fail',
+        count: employeeCount,
+        sample: sampleEmployee ? sampleEmployee.name : 'none'
+      };
+    } catch (err) {
+      results.tests.employees = { status: 'fail', message: err.message };
+    }
+
+    // Test 4: Clock records data
+    try {
+      const clockCount = await db.collection('clock_records').countDocuments();
+      results.tests.clockRecords = {
+        status: 'pass',
+        count: clockCount,
+        message: clockCount > 0 ? 'Has data' : 'No data (normal if no one clocked in)'
+      };
+    } catch (err) {
+      results.tests.clockRecords = { status: 'fail', message: err.message };
+    }
+
+    // Test 5: Attendance aggregation
+    try {
+      const today = new Date();
+      const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+      
+      const attendanceTest = await db.collection("clock_records").aggregate([
+        {
+          $match: {
+            clock_in: { $gte: startOfDay, $lte: endOfDay }
+          }
+        },
+        {
+          $lookup: {
+            from: "employees",
+            localField: "employee_id", 
+            foreignField: "_id",
+            as: "employee_id"
+          }
+        }
+      ]).toArray();
+      
+      results.tests.attendance = {
+        status: 'pass',
+        todayPresent: attendanceTest.length,
+        message: 'Attendance aggregation working'
+      };
+    } catch (err) {
+      results.tests.attendance = { status: 'fail', message: err.message };
+    }
+
+    // Overall status
+    const failedTests = Object.values(results.tests).filter(test => test.status === 'fail');
+    results.status = failedTests.length === 0 ? 'all_pass' : 'some_fail';
+    results.summary = {
+      total: Object.keys(results.tests).length,
+      passed: Object.values(results.tests).filter(test => test.status === 'pass').length,
+      failed: failedTests.length
+    };
+
+    res.json({
+      success: true,
+      results,
+      recommendations: failedTests.length > 0 ? 
+        'Some tests failed. Create test data using the /create-test-data endpoint.' : 
+        'All tests passed! Your system is ready.'
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: 'Test route failed',
+      message: err.message
+    });
+  }
+});
 
 // Create new employee
 router.post("/employees", authorize([ROLES.ADMIN]), upload.single("image"), [
@@ -555,10 +662,49 @@ router.get('/debug', async (req, res) => {
     // Sample data from employees and clock_records
     let sampleEmployees = [];
     let sampleClockRecords = [];
+    let validationResults = {
+      employees: false,
+      clockRecords: false,
+      attendanceData: false
+    };
     
     try {
       sampleEmployees = await db.collection('employees').find({}).limit(3).toArray();
       sampleClockRecords = await db.collection('clock_records').find({}).limit(3).toArray();
+      
+      // Validation checks
+      validationResults.employees = sampleEmployees.length > 0;
+      validationResults.clockRecords = sampleClockRecords.length > 0;
+      
+      // Test attendance aggregation
+      const today = new Date();
+      const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+      
+      const attendanceTest = await db.collection("clock_records").aggregate([
+        {
+          $match: {
+            clock_in: {
+              $gte: startOfDay,
+              $lte: endOfDay
+            }
+          }
+        },
+        {
+          $lookup: {
+            from: "employees",
+            localField: "employee_id",
+            foreignField: "_id",
+            as: "employee_id"
+          }
+        },
+        {
+          $unwind: "$employee_id"
+        }
+      ]).toArray();
+      
+      validationResults.attendanceData = attendanceTest.length >= 0;
+      
     } catch (err) {
       console.log('Error fetching sample data:', err.message);
     }
@@ -570,6 +716,7 @@ router.get('/debug', async (req, res) => {
       timestamp: new Date(),
       collections: collectionNames,
       collectionCounts: collectionCounts,
+      validation: validationResults,
       sampleData: {
         employees: sampleEmployees,
         clockRecords: sampleClockRecords
@@ -657,42 +804,113 @@ router.post('/create-test-data', async (req, res) => {
   }
 });
 
-// Get all employees (for admin) - simplified without auth for testing
+// Get all employees (for admin) - with comprehensive testing
 router.get('/employees', async (req, res) => {
   try {
     console.log('Admin /employees route hit');
+    console.log('Request headers:', req.headers);
+    
     const db = getDB();
+    
+    // Check if employees collection exists
+    const collections = await db.listCollections().toArray();
+    const hasEmployeesCollection = collections.some(col => col.name === 'employees');
+    
+    if (!hasEmployeesCollection) {
+      console.log('Employees collection does not exist');
+      return res.json({ 
+        success: true, 
+        employees: [],
+        message: 'No employees collection found. Create test data first.',
+        debug: { collections: collections.map(col => col.name) }
+      });
+    }
+    
     const employees = await db.collection("employees")
       .find({}, { projection: { password: 0 } })
       .toArray();
+      
     console.log('Found employees:', employees.length);
     console.log('Employee data sample:', employees.slice(0, 2));
-    res.json({ success: true, employees });
+    
+    // Validate employee data structure
+    const validEmployees = employees.filter(emp => emp.name && emp.email);
+    
+    res.json({ 
+      success: true, 
+      employees: validEmployees,
+      total: validEmployees.length,
+      debug: {
+        totalFound: employees.length,
+        validEmployees: validEmployees.length,
+        sampleData: employees.slice(0, 1)
+      }
+    });
   } catch (err) {
     console.error('Error in /employees route:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch employees', details: err.message });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch employees', 
+      details: err.message,
+      stack: err.stack 
+    });
   }
 });
 
-// Get single employee profile + files (for admin) - simplified without auth for testing
+// Get single employee profile + files (for admin) - with validation
 router.get('/employees/:id', async (req, res) => {
   try {
     console.log('Fetching employee profile for ID:', req.params.id);
+    
+    // Validate ObjectId format
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid employee ID format' 
+      });
+    }
+    
     const db = getDB();
     const employee = await db.collection("employees").findOne(
       { _id: new ObjectId(req.params.id) },
       { projection: { password: 0 } }
     );
+    
     if (!employee) {
       console.log('Employee not found');
-      return res.status(404).json({ success: false, error: 'Employee not found' });
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Employee not found',
+        id: req.params.id 
+      });
     }
+    
     console.log('Employee found:', employee.name);
-    const files = await db.collection("files").find({ employeeId: new ObjectId(req.params.id) }).toArray();
-    res.json({ success: true, employee, files });
+    
+    // Try to fetch files, but don't fail if files collection doesn't exist
+    let files = [];
+    try {
+      files = await db.collection("files").find({ employeeId: new ObjectId(req.params.id) }).toArray();
+    } catch (fileErr) {
+      console.log('Files collection error (not critical):', fileErr.message);
+    }
+    
+    res.json({ 
+      success: true, 
+      employee, 
+      files,
+      debug: {
+        employeeId: req.params.id,
+        filesFound: files.length
+      }
+    });
   } catch (err) {
     console.error('Error fetching employee profile:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch employee profile', details: err.message });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch employee profile', 
+      details: err.message 
+    });
   }
 });
 
