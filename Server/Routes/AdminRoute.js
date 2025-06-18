@@ -418,41 +418,7 @@ router.post("/categories", authorize([ROLES.ADMIN]), [
 
 // ==================== EMPLOYEE ROUTES ====================
 
-// Get all employees
-router.get("/employees", authorize([ROLES.ADMIN]), async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
 
-    const employees = await User.find({ role: ROLES.EMPLOYEE })
-      .select('-password')
-      .populate('category_id', 'name')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    const total = await User.countDocuments({ role: ROLES.EMPLOYEE });
-
-    res.json({ 
-      success: true, 
-      data: employees,
-      pagination: {
-        current: page,
-        pages: Math.ceil(total / limit),
-        total,
-        limit
-      }
-    });
-  } catch (error) {
-    console.error("Error fetching employees:", error);
-    res.status(500).json({ 
-      success: false, 
-      error: "Failed to retrieve employees" 
-    });
-  }
-});
 
 // Create new employee
 router.post("/employees", authorize([ROLES.ADMIN]), upload.single("image"), [
@@ -586,13 +552,28 @@ router.get('/debug', async (req, res) => {
       }
     }
     
+    // Sample data from employees and clock_records
+    let sampleEmployees = [];
+    let sampleClockRecords = [];
+    
+    try {
+      sampleEmployees = await db.collection('employees').find({}).limit(3).toArray();
+      sampleClockRecords = await db.collection('clock_records').find({}).limit(3).toArray();
+    } catch (err) {
+      console.log('Error fetching sample data:', err.message);
+    }
+    
     res.json({ 
       success: true, 
       message: 'Admin route is working',
       user: req.user ? req.user.name : 'No user',
       timestamp: new Date(),
       collections: collectionNames,
-      collectionCounts: collectionCounts
+      collectionCounts: collectionCounts,
+      sampleData: {
+        employees: sampleEmployees,
+        clockRecords: sampleClockRecords
+      }
     });
   } catch (err) {
     res.json({ 
@@ -676,7 +657,7 @@ router.post('/create-test-data', async (req, res) => {
   }
 });
 
-// Get all employees (for admin)
+// Get all employees (for admin) - simplified without auth for testing
 router.get('/employees', async (req, res) => {
   try {
     console.log('Admin /employees route hit');
@@ -685,26 +666,33 @@ router.get('/employees', async (req, res) => {
       .find({}, { projection: { password: 0 } })
       .toArray();
     console.log('Found employees:', employees.length);
+    console.log('Employee data sample:', employees.slice(0, 2));
     res.json({ success: true, employees });
   } catch (err) {
     console.error('Error in /employees route:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch employees' });
+    res.status(500).json({ success: false, error: 'Failed to fetch employees', details: err.message });
   }
 });
 
-// Get single employee profile + files (for admin)
+// Get single employee profile + files (for admin) - simplified without auth for testing
 router.get('/employees/:id', async (req, res) => {
   try {
+    console.log('Fetching employee profile for ID:', req.params.id);
     const db = getDB();
     const employee = await db.collection("employees").findOne(
       { _id: new ObjectId(req.params.id) },
       { projection: { password: 0 } }
     );
-    if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });
+    if (!employee) {
+      console.log('Employee not found');
+      return res.status(404).json({ success: false, error: 'Employee not found' });
+    }
+    console.log('Employee found:', employee.name);
     const files = await db.collection("files").find({ employeeId: new ObjectId(req.params.id) }).toArray();
     res.json({ success: true, employee, files });
   } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to fetch employee profile' });
+    console.error('Error fetching employee profile:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch employee profile', details: err.message });
   }
 });
 
